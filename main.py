@@ -197,7 +197,7 @@ class Bot(BaseBot):
         
         try:
             # Set bot position command (only owner can use this)
-            if lower_msg.startswith("!set"):
+            if lower_msg.startswith("!set1"):
                 if user.id == self.owner_id:
                     result = await self.set_bot_position(user.id)
                     await self.highrise.chat(result)
