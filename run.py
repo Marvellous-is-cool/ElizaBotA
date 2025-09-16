@@ -15,7 +15,7 @@ import time
 # Add the current directory to Python path
 sys.path.append(str(Path(__file__).parent))
 
-from main_simplified import main
+from main import main
 
 # Create Flask app for health checks (required for Render web service)
 app = Flask(__name__)
