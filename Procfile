@@ -1,1 +1,1 @@
-web: python run_simplified.py
+web: python run.py
