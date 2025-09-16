@@ -1,2 +1,3 @@
 highrise-bot-sdk
-python-dotenv 
+python-dotenv
+gunicorn 
