@@ -17,7 +17,6 @@ itsdangerous
 jinja2 
 markupsafe 
 multidict 
-pendulum
 python-dateutil 
 python-dotenv 
 pytzdata 
