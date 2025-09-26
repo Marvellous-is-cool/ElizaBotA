@@ -22,29 +22,18 @@ running_under_gunicorn = 'gunicorn' in os.environ.get('SERVER_SOFTWARE', '')
 def start_bot_thread():
     """Start the Highrise bot in a separate thread"""
     # Import here to avoid circular imports
-    from main import main, Bot
-    from highrise.__main__ import BotDefinition
+    from main import main
     import asyncio
     
     print("Starting Matchmaking Bot...")
-    
-    # Define bot configuration
-    # Create a Bot instance first
-    bot_instance = Bot()
-    
-    # Use positional arguments as shown in main.py
-    bot_definition = BotDefinition(
-        bot_instance,
-        os.getenv("ROOM_ID"),
-        os.getenv("BOT_TOKEN")
-    )
     
     # Create a new event loop for the bot
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-        main(bot_definition)
+        # Call main without arguments - it will get environment variables itself
+        loop.run_until_complete(main())
     except Exception as e:
         print(f"Bot crashed with error: {e}")
     finally:

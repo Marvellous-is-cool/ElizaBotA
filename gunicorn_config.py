@@ -25,25 +25,19 @@ def post_fork(server, worker):
     """Start the bot after forking a worker"""
     def start_bot_thread():
         try:
-            from main import main, Bot
-            from highrise.__main__ import BotDefinition
+            # Import the main function from your main.py
+            from main import main
             import asyncio
 
             print("Starting Matchmaking Bot in worker...")
 
-            # Create a Bot instance first
-            bot_instance = Bot()
-            
-            # Use positional arguments as shown in main.py
-            bot_definition = BotDefinition(
-                bot_instance,
-                os.getenv("ROOM_ID"),
-                os.getenv("BOT_TOKEN")
-            )
-
+            # Create a new event loop
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            main(bot_definition)
+            
+            # Call the main function without arguments
+            # It will get ROOM_ID and BOT_TOKEN from environment variables
+            loop.run_until_complete(main())
         except Exception as e:
             print(f"Bot thread error: {e}")
 
