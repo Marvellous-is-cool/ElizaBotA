@@ -4,7 +4,7 @@ services:
     name: matchmaking-bot
     runtime: python
     buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
-    startCommand: bash start.sh
+    startCommand: gunicorn -c gunicorn_config.py --bind 0.0.0.0:$PORT wsgi:app
     envVars:
       - key: BOT_TOKEN
         sync: false # Set manually in Render dashboard
@@ -16,5 +16,8 @@ services:
         value: "MatchBot" # Default value, can be changed
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # PORT is automatically set by Render, but we can specify a fallback
+      - key: PORT
+        value: "10000"
     healthCheckPath: /health
     autoDeploy: true

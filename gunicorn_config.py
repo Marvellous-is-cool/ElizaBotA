@@ -4,7 +4,10 @@ Gunicorn configuration file for the Matchmaking Bot
 import os
 from threading import Thread
 
-bind = f"0.0.0.0:{os.getenv('PORT', '6000')}"
+# Get the PORT environment variable and convert it to an integer
+# Render sets this automatically, and we need to respect it
+port = int(os.getenv('PORT', '10000'))
+bind = f"0.0.0.0:{port}"
 workers = 1
 worker_class = 'sync'
 timeout = 120

@@ -24,6 +24,11 @@ fi
 # Set environment variables if needed
 export PYTHONPATH="$(pwd):${PYTHONPATH}"
 
-# Start gunicorn with the specified config
-echo "Executing: gunicorn -c gunicorn_config.py wsgi:app"
-exec gunicorn -c gunicorn_config.py wsgi:app
+# Print environment info for debugging
+echo "Environment: PORT=${PORT}"
+echo "Current directory: $(pwd)"
+echo "Python path: ${PYTHONPATH}"
+
+# Start gunicorn with the specified config and explicit port binding
+echo "Executing: gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:app"
+exec gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:app
