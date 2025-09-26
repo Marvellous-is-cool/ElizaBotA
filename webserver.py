@@ -35,6 +35,46 @@ def health():
         "uptime_seconds": uptime
     })
 
+@app.route('/bot-status')
+def bot_status():
+    """Detailed bot status for debugging"""
+    # Import here to avoid circular imports
+    try:
+        from db.init_db import initialize_db
+        import asyncio
+        
+        # Check database connection
+        async def check_db():
+            try:
+                client = await initialize_db()
+                if client:
+                    await client.disconnect()
+                    return True
+                return False
+            except:
+                return False
+        
+        # Run the async check
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        db_connected = loop.run_until_complete(check_db())
+        loop.close()
+        
+    except Exception as e:
+        db_connected = False
+    
+    return jsonify({
+        "bot_running": bot_running,
+        "database_connected": db_connected,
+        "uptime_seconds": round(time.time() - bot_start_time) if bot_start_time else None,
+        "environment_vars": {
+            "ROOM_ID": "Set" if os.getenv("ROOM_ID") else "Missing",
+            "BOT_TOKEN": "Set" if os.getenv("BOT_TOKEN") else "Missing", 
+            "MONGODB_URI": "Set" if os.getenv("MONGODB_URI") else "Missing"
+        },
+        "commands_should_work": bot_running and (db_connected or "fallback_available")
+    })
+
 @app.route('/restart', methods=['POST'])
 def restart_bot():
     """Endpoint to restart the bot (protected in production)"""

@@ -1520,8 +1520,12 @@ class Bot(BaseBot):
             # Set bot position command (only owner can use this)
             if lower_msg == "!set":
                 if user.id == self.owner_id:
-                    result = await self.set_bot_position(user.id)
-                    await self.highrise.chat(result)
+                    try:
+                        result = await self.set_bot_position(user.id)
+                        await self.highrise.chat(result)
+                    except Exception as e:
+                        await self.highrise.chat(f"Error setting position: {str(e)[:100]}")
+                        print(f"Error in !set command: {e}")
                 else:
                     await self.highrise.chat("Only the room owner can set my position! 🔒")
                 return
@@ -1540,13 +1544,18 @@ class Bot(BaseBot):
             if lower_msg == "!unsub" or lower_msg == "unsub":
                 if user.id in self.subscribers:
                     self.subscribers.remove(user.id)
-                    # Save to database
-                    if self.db_client and self.db_client.is_connected:
-                        await self.db_client.bot_data.update_one(
-                            {"data_type": "subscribers"},
-                            {"$set": {"user_ids": self.subscribers}},
-                            upsert=True
-                        )
+                    # Save to database with error handling
+                    try:
+                        if self.db_client and self.db_client.is_connected:
+                            await self.db_client.bot_data.update_one(
+                                {"data_type": "subscribers"},
+                                {"$set": {"user_ids": self.subscribers}},
+                                upsert=True
+                            )
+                    except Exception as db_error:
+                        print(f"Database error in !unsub: {db_error}")
+                        # Continue anyway - the user was removed from memory
+                    
                     await self.highrise.chat(f"@{user.username} has been removed from the notification list!")
                 else:
                     await self.highrise.chat(f"@{user.username}, you were not subscribed to notifications.")
