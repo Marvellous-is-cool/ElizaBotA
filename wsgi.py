@@ -54,9 +54,11 @@ def when_ready(server):
     bot_thread.start()
     print("Gunicorn server is ready, bot thread started")
 
+# Import the Flask app
+from webserver import app
+
 # For testing purposes when running directly
 if __name__ == "__main__":
-    from webserver import app
     
     # Start the bot thread
     bot_thread = Thread(target=start_bot_thread)
