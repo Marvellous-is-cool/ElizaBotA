@@ -29,6 +29,22 @@ echo "Environment: PORT=${PORT}"
 echo "Current directory: $(pwd)"
 echo "Python path: ${PYTHONPATH}"
 
+# Check required environment variables
+if [ -z "$ROOM_ID" ]; then
+    echo "❌ Error: ROOM_ID not set in environment!"
+    echo "Please set ROOM_ID in your .env file or environment variables"
+    exit 1
+fi
+
+if [ -z "$BOT_TOKEN" ]; then
+    echo "❌ Error: BOT_TOKEN not set in environment!"
+    echo "Please set BOT_TOKEN in your .env file or environment variables"
+    exit 1
+fi
+
+echo "ROOM_ID: Found ✅"
+echo "BOT_TOKEN: Found ✅"
+
 # Check if MongoDB environment variables are set
 if [ -z "$MONGODB_URI" ]; then
     echo "⚠️  Warning: MONGODB_URI not set in environment!"
@@ -45,6 +61,25 @@ if [ -z "$MONGODB_DB_NAME" ]; then
 else
     echo "MongoDB Database: $MONGODB_DB_NAME"
 fi
+
+# Test the bot connection (similar to how run.py works)
+echo "Verifying environment for bot..."
+python -c "
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+room_id = os.getenv('ROOM_ID')
+bot_token = os.getenv('BOT_TOKEN')
+mongodb_uri = os.getenv('MONGODB_URI')
+
+print(f'ROOM_ID: {room_id[:5]}... (length: {len(room_id)})')
+print(f'BOT_TOKEN: {bot_token[:5]}... (length: {len(bot_token)})')
+if mongodb_uri:
+    print(f'MONGODB_URI configured: Yes (length: {len(mongodb_uri)})')
+else:
+    print('MONGODB_URI configured: No')
+" || echo "⚠️ Environment verification failed, but continuing startup"
 
 # Test MongoDB connection before starting Gunicorn
 echo "Testing MongoDB connection..."
@@ -67,6 +102,9 @@ async def test_connection():
 asyncio.run(test_connection())
 " || echo "⚠️  MongoDB connection test failed, but continuing startup"
 
+# Set log level for more verbose output
+export GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL:-"debug"}
+
 # Start gunicorn with the specified config and explicit port binding
-echo "Executing: gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:app"
-exec gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:app
+echo "Executing: gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} --log-level ${GUNICORN_LOG_LEVEL} wsgi:app"
+exec gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} --log-level ${GUNICORN_LOG_LEVEL} wsgi:app

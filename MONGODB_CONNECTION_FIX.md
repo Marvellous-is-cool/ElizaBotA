@@ -38,11 +38,13 @@ The following changes have been made to fix the MongoDB connection issue in the 
 To test if MongoDB is connecting properly:
 
 1. First, try the dedicated test script:
+
    ```bash
    python test_mongodb_connection.py
    ```
 
 2. If the test is successful, try running with the improved start script:
+
    ```bash
    ./start.sh
    ```
