@@ -7,10 +7,6 @@ import time
 import signal
 import sys
 
-# Import bot-related modules
-from main import main, Bot
-from highrise.__main__ import BotDefinition
-
 # Load environment variables
 load_dotenv()
 
@@ -18,7 +14,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Global variables to track bot status
-bot_instance = None
+bot_running = False
 bot_start_time = None
 bot_thread = None
 
@@ -35,7 +31,7 @@ def health():
     return jsonify({
         "status": "healthy", 
         "bot": "matchmaking-bot",
-        "bot_running": bot_instance is not None,
+        "bot_running": bot_running,
         "uptime_seconds": uptime
     })
 
@@ -63,27 +59,48 @@ def keep_alive():
 
 def start_bot():
     """Start the Highrise bot in a separate thread"""
-    global bot_instance, bot_start_time
+    global bot_running, bot_start_time
+    
+    # Import here to avoid circular imports
+    from main import main, Bot
+    from highrise import __main__
+    from highrise.__main__ import BotDefinition
     
     # Record start time for uptime tracking
     bot_start_time = time.time()
+    bot_running = True
     
-    # Define bot configuration
-    bot_definition = BotDefinition(
-        bot=Bot,
-        room_id=os.getenv("ROOM_ID"),
-        token=os.getenv("BOT_TOKEN"),
-    )
+    # Get environment variables
+    room_id = os.getenv("ROOM_ID")
+    bot_token = os.getenv("BOT_TOKEN")
+    
+    if not room_id or not bot_token:
+        print("❌ Error: Missing ROOM_ID or BOT_TOKEN environment variables!")
+        bot_running = False
+        return
+    
+    # Clean the credentials
+    room_id = room_id.strip().rstrip('%') if room_id else None
+    bot_token = bot_token.strip().rstrip('%') if bot_token else None
+    
+    print(f"Starting bot for room: {room_id}")
     
     # Run the bot
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        main(bot_definition)
+        # Create bot instance and definition
+        bot_instance = Bot()
+        definitions = [BotDefinition(bot_instance, room_id, bot_token)]
+        
+        # Run the main function from Highrise SDK
+        loop.run_until_complete(__main__.main(definitions))
     except Exception as e:
         print(f"Bot crashed with error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
-        bot_instance = None
+        bot_running = False
 
 def restart_bot_process():
     """Restart the bot process"""
