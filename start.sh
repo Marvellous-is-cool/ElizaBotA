@@ -106,5 +106,5 @@ asyncio.run(test_connection())
 export GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL:-"debug"}
 
 # Start gunicorn with the specified config and explicit port binding
-echo "Executing: gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} --log-level ${GUNICORN_LOG_LEVEL} wsgi:app"
-exec gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} --log-level ${GUNICORN_LOG_LEVEL} wsgi:app
+echo "Executing: gunicorn --config gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:application"
+exec gunicorn --config gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:application
