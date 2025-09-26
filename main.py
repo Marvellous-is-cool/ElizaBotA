@@ -307,24 +307,39 @@ class Bot(BaseBot):
         self.owner_id = session_metadata.room_info.owner_id
         self.bot_status = True
         
+        logger.info(f"🎯 Bot connected to room! Bot ID: {self.bot_id}, Owner ID: {self.owner_id}")
+        
         # Initialize services (MongoDB and Matchmaking)
+        logger.info("🔧 Initializing services (MongoDB and Matchmaking)...")
         services_initialized = await self.initialize_services()
         
+        if services_initialized:
+            logger.info("✅ Services initialized successfully")
+        else:
+            logger.warning("⚠️ Services initialization failed - running with limited functionality")
+        
         # Load bot position
+        logger.info("📍 Loading bot position data...")
         await self.load_bot_data()
         
         # Place bot at saved position
+        logger.info("🚶 Placing bot at saved position...")
         await self.place_bot()
         
         # Fix registration data structure if needed
         if services_initialized:
+            logger.info("🔧 Fixing registration data structure...")
             await self.fix_registration_data()
         
         # Start the match prompt task
+        logger.info("⏰ Starting match prompt task...")
         await self.start_match_prompt_task()
         
         # Welcome message
+        logger.info("📢 Sending welcome message to room...")
         await self.highrise.chat(f"💘 {BOT_NAME} Matchmaking Bot activated! 💘 Find your perfect match here")
+        
+        logger.info("🎉 Bot startup sequence completed successfully!")
 
     async def start_match_prompt_task(self):
         """Start the periodic match prompt task"""
@@ -437,12 +452,21 @@ class Bot(BaseBot):
 
     async def on_whisper(self, user: User, message: str) -> None:
         """Handle whisper messages from users"""
-        response = await self.command_handler(user.id, message)
-        if response:
-            try:
-                await self.highrise.send_whisper(user.id, response)
-            except Exception as e:
-                await self.highrise.chat(f"Whisper Error: {e}")
+        logger.info(f"👥 Whisper received: '{message}' from @{user.username} (ID: {user.id})")
+        
+        try:
+            response = await self.command_handler(user.id, message)
+            if response:
+                try:
+                    await self.highrise.send_whisper(user.id, response)
+                    logger.info(f"✅ Whisper response sent to @{user.username}")
+                except Exception as e:
+                    await self.highrise.chat(f"Whisper Error: {e}")
+                    logger.error(f"❌ Failed to send whisper to @{user.username}: {e}")
+            else:
+                logger.info(f"ℹ️ No response generated for whisper from @{user.username}")
+        except Exception as e:
+            logger.error(f"❌ Error processing whisper from @{user.username}: {e}")
     
     async def on_message(self, user_id: str, conversation_id: str, is_new_conversation: bool) -> None:
         """Handle direct messages to the bot via conversations"""
@@ -1516,18 +1540,26 @@ class Bot(BaseBot):
         """Handle chat commands"""
         lower_msg = message.lower().strip()
         
+        # Log all chat commands for debugging
+        if lower_msg.startswith("!") or lower_msg in ["pop", "love", "help", "equip", "remove"]:
+            logger.info(f"💬 Command received: '{message}' from @{user.username} (ID: {user.id})")
+        
         try:
             # Set bot position command (only owner can use this)
             if lower_msg == "!set":
+                logger.info(f"🎯 !set command from @{user.username} (Owner: {user.id == self.owner_id})")
                 if user.id == self.owner_id:
                     try:
                         result = await self.set_bot_position(user.id)
                         await self.highrise.chat(result)
+                        logger.info(f"✅ !set command completed: {result}")
                     except Exception as e:
-                        await self.highrise.chat(f"Error setting position: {str(e)[:100]}")
-                        print(f"Error in !set command: {e}")
+                        error_msg = f"Error setting position: {str(e)[:100]}"
+                        await self.highrise.chat(error_msg)
+                        logger.error(f"❌ !set command failed: {e}")
                 else:
                     await self.highrise.chat("Only the room owner can set my position! 🔒")
+                    logger.warning(f"⚠️ !set command denied for @{user.username} (not owner)")
                 return
             
             # Equip command
