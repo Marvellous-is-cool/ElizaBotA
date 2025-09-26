@@ -1,7 +1,7 @@
 # render.yaml - Render Blueprint Configuration
 services:
   - type: web
-    name: birthday-bot
+    name: matchmaking-bot
     runtime: python
     buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: python run.py
@@ -10,6 +10,11 @@ services:
         sync: false # Set manually in Render dashboard
       - key: ROOM_ID
         sync: false # Set manually in Render dashboard
+      - key: MONGODB_URI
+        sync: false # Set manually in Render dashboard
+      - key: MONGODB_DB_NAME
+        value: "MatchBot" # Default value, can be changed
       - key: PYTHON_VERSION
         value: "3.11.9"
+    healthCheckPath: /health
     autoDeploy: true

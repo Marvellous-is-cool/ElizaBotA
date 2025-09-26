@@ -9,7 +9,11 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "I'm alive"
+    return "💘 Matchmaking Bot is alive! 💕"
+
+@app.route('/health')
+def health():
+    return {"status": "healthy", "bot": "matchmaking-bot"}
 
 def run():
     app.run(
