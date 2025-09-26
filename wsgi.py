@@ -29,10 +29,14 @@ def start_bot_thread():
     print("Starting Matchmaking Bot...")
     
     # Define bot configuration
+    # Create a Bot instance first
+    bot_instance = Bot()
+    
+    # Use positional arguments as shown in main.py
     bot_definition = BotDefinition(
-        bot=Bot,
-        room_id=os.getenv("ROOM_ID"),
-        token=os.getenv("BOT_TOKEN"),
+        bot_instance,
+        os.getenv("ROOM_ID"),
+        os.getenv("BOT_TOKEN")
     )
     
     # Create a new event loop for the bot

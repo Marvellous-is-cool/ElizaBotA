@@ -31,10 +31,14 @@ def post_fork(server, worker):
 
             print("Starting Matchmaking Bot in worker...")
 
+            # Create a Bot instance first
+            bot_instance = Bot()
+            
+            # Use positional arguments as shown in main.py
             bot_definition = BotDefinition(
-                bot=Bot,
-                room_id=os.getenv("ROOM_ID"),
-                token=os.getenv("BOT_TOKEN"),
+                bot_instance,
+                os.getenv("ROOM_ID"),
+                os.getenv("BOT_TOKEN")
             )
 
             loop = asyncio.new_event_loop()
