@@ -430,21 +430,35 @@ class Bot(BaseBot):
     
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         """Welcome users when they join"""
-        await self.highrise.react("wave", user.id)
-        await self.highrise.chat(f"Welcome {user.username}! 👋 Sit and Relax, the Match Show is about to begin! ❤️")
+        logger.info(f"👋 User joined: @{user.username} (ID: {user.id})")
         
-        # Send whisper with registration instructions
-        await self.highrise.send_whisper(user.id, 
-            "Welcome to the Match Show! To register, whisper me one of the following:\n\n"
-            "• 'POP' - To register as a participant\n"
-            "• 'LOVE' - To register as someone looking for love\n"
-            "• '!SUB' - To get notified when the show starts\n"
-            "• '!UNSUB' - To stop receiving notifications\n"
-            "• '!WHEN' - Check when the next Match Show is scheduled")
+        try:
+            await self.highrise.react("wave", user.id)
+            await self.highrise.chat(f"Welcome {user.username}! 👋 Sit and Relax, the Match Show is about to begin! ❤️")
+            
+            # Send shorter whisper to avoid message length limits
+            welcome_msg = (
+                "💘 Welcome to Match Show! Whisper me:\n"
+                "• POP - Register to participate\n"
+                "• LOVE - Looking for love\n"
+                "• !SUB - Get notifications\n"
+                "• help - More info"
+            )
+            
+            await self.highrise.send_whisper(user.id, welcome_msg)
+            logger.info(f"✅ Welcome message sent to @{user.username}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error welcoming @{user.username}: {e}")
+            # Don't crash if welcome fails - just log it
         
         # Save user to database if connected
-        if self.db_client and self.db_client.is_connected:
-            await self.db_client.save_user(user.id, user.username)
+        try:
+            if self.db_client and self.db_client.is_connected:
+                await self.db_client.save_user(user.id, user.username)
+                logger.info(f"💾 Saved user @{user.username} to database")
+        except Exception as e:
+            logger.error(f"❌ Database save failed for @{user.username}: {e}")
 
     async def on_user_leave(self, user: User) -> None:
         """Say goodbye when users leave"""
