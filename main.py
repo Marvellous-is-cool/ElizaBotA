@@ -1,7 +1,6 @@
 from highrise import BaseBot, __main__, CurrencyItem, Item, Position, AnchorPosition, SessionMetadata, User
 from highrise.__main__ import BotDefinition
 from asyncio import run as arun
-from json import load, dump
 import asyncio
 import random
 import os
@@ -61,15 +60,18 @@ class Bot(BaseBot):
                 # Load hosts, VIPs, event date and subscribers from MongoDB
                 await self.load_match_show_data()
                 
+                # Load bot position from MongoDB
+                await self.load_bot_data()
+                
                 return True
             else:
-                # Load position from local file as fallback
-                self.load_bot_data_local()
+                # Set default position if MongoDB not available
+                await self.load_bot_data()
                 return False
         except Exception as e:
-            pass
-            # Load position from local file as fallback
-            self.load_bot_data_local()
+            logger.error(f"Failed to initialize services: {str(e)}")
+            # Set default position on error
+            await self.load_bot_data()
             return False
             
     async def load_match_show_data(self):
@@ -103,9 +105,10 @@ class Bot(BaseBot):
             pass
     
     async def load_bot_data(self):
-        """Load bot position data from MongoDB or local file"""
+        """Load bot position data from MongoDB only"""
+        self.bot_position = Position(0, 0, 0, "FrontRight")  # Default position
+        
         if self.db_client and self.db_client.is_connected:
-            # Try to load from MongoDB
             try:
                 position_data = await self.db_client.get_bot_position()
                 if position_data:
@@ -115,30 +118,13 @@ class Bot(BaseBot):
                         position_data["z"], 
                         position_data["facing"]
                     )
-                    return
+                    logger.info(f"Loaded bot position from MongoDB: {position_data}")
+                else:
+                    logger.info("No bot position found in MongoDB, using default position")
             except Exception as e:
-                pass
-        
-        # Fallback to local file
-        self.load_bot_data_local()
-
-    def load_bot_data_local(self):
-        """Load bot position data from local file as fallback"""
-        self.create_data_file()
-        try:
-            with open("./bot_data.json", "r") as file:
-                data = load(file)
-                pos_data = data.get("bot_position", {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"})
-                self.bot_position = Position(pos_data["x"], pos_data["y"], pos_data["z"], pos_data["facing"])
-        except Exception as e:
-            self.bot_position = Position(0, 0, 0, "FrontRight")
-
-    def create_data_file(self):
-        """Create local data file if it doesn't exist"""
-        if not os.path.exists("./bot_data.json"):
-            default_data = {"bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}
-            with open("./bot_data.json", "w") as file:
-                dump(default_data, file)
+                logger.warning(f"Failed to load bot position from MongoDB: {str(e)}")
+        else:
+            logger.warning("MongoDB not connected, using default bot position")
     
     async def get_username_from_id(self, user_id: str) -> str:
         """Get a username from a user ID using multiple methods for reliability
@@ -197,26 +183,35 @@ class Bot(BaseBot):
                         "facing": position.facing
                     }
                     
-                    # Save to MongoDB if available
+                    logger.info(f"💾 Saving bot position: x={position.x}, y={position.y}, z={position.z}")
+                    
+                    # Save to MongoDB 
+                    position_saved = False
                     if self.db_client and self.db_client.is_connected:
-                        await self.db_client.save_bot_position(position_data)
+                        try:
+                            await self.db_client.save_bot_position(position_data)
+                            position_saved = True
+                            logger.info("✅ Bot position saved to MongoDB")
+                        except Exception as db_error:
+                            logger.error(f"❌ Failed to save position to MongoDB: {db_error}")
                     
-                    # Also save locally as backup
-                    with open("./bot_data.json", "r+") as file:
-                        data = load(file)
-                        file.seek(0)
-                        data["bot_position"] = position_data
-                        dump(data, file)
-                        file.truncate()
-                    
-                    # Update bot position
+                    # Update bot position in memory
                     self.bot_position = position
-                    set_position = Position(position.x, position.y + 0.0000001, position.z, facing=position.facing)
-                    await self.highrise.teleport(self.bot_id, set_position)
-                    await self.highrise.teleport(self.bot_id, position)
-                    await self.highrise.walk_to(position)
                     
-                    return "Bot position updated! 📍"
+                    # Move bot to the position
+                    try:
+                        set_position = Position(position.x, position.y + 0.0000001, position.z, facing=position.facing)
+                        await self.highrise.teleport(self.bot_id, set_position)
+                        await self.highrise.teleport(self.bot_id, position)
+                        await self.highrise.walk_to(position)
+                        logger.info("🚶 Bot moved to new position")
+                    except Exception as move_error:
+                        logger.error(f"❌ Failed to move bot: {move_error}")
+                    
+                    if position_saved:
+                        return "Bot position updated and saved! 📍"
+                    else:
+                        return "Bot position updated (not saved - database unavailable) 📍"
                 else:
                     return "Failed to get your position! 🤔"
         except Exception as e:
