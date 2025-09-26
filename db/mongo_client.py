@@ -30,16 +30,32 @@ class MongoDBClient:
     async def connect(self) -> bool:
         """Connect to MongoDB and initialize collections"""
         try:
+            # Print status information without exposing credentials
+            masked_uri = self.uri
+            if "://" in masked_uri and "@" in masked_uri:
+                parts = masked_uri.split("@")
+                auth_part = parts[0].split("://")[1].split(":")
+                if len(auth_part) > 1:
+                    masked_uri = f"{parts[0].split('://')[0]}://{auth_part[0]}:****@{parts[1]}"
+            
+            print(f"Connecting to MongoDB at: {masked_uri}")
+            print(f"Database name: {self.db_name}")
+            
             # Create motor client
-            self.client = AsyncIOMotorClient(self.uri, serverSelectionTimeoutMS=5000)
+            self.client = AsyncIOMotorClient(self.uri, serverSelectionTimeoutMS=10000)
+            
             # Check connection
+            print("Testing MongoDB server connection...")
             await self.client.server_info()
+            
             # Get database
             self.db = self.client[self.db_name]
             self.is_connected = True
+            print(f"Connected to MongoDB database: {self.db_name}")
             logger.info(f"Connected to MongoDB database: {self.db_name}")
             
             # Initialize collections
+            print("Initializing collections...")
             self.users = self.db.users
             self.matches = self.db.matches
             self.profiles = self.db.profiles
@@ -49,16 +65,28 @@ class MongoDBClient:
             self.subscribers = self.db.subscribers
             
             # Create indexes
+            print("Creating database indexes...")
             await self.users.create_index("user_id", unique=True)
             await self.profiles.create_index("user_id", unique=True)
             await self.matches.create_index([("user1_id", 1), ("user2_id", 1)], unique=True)
             await self.registrations.create_index("user_id", unique=True)
             
+            print("MongoDB setup complete")
             return True
         
         except (ConnectionFailure, ServerSelectionTimeoutError) as e:
             self.is_connected = False
+            print(f"Failed to connect to MongoDB: {str(e)}")
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
+            
+            # Add troubleshooting info
+            if "timed out" in str(e) or "ServerSelectionTimeoutError" in str(e):
+                print("MongoDB connection timed out. Possible causes:")
+                print("- Network connectivity issues")
+                print("- MongoDB server not running or accessible")
+                print("- IP address not whitelisted in MongoDB Atlas")
+                print("- Incorrect connection string")
+            
             return False
     
     async def disconnect(self):

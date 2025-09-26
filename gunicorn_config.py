@@ -29,8 +29,15 @@ def post_fork(server, worker):
             from safe_main import run_bot
             import asyncio
             import sys
+            import os
 
             print("Starting Matchmaking Bot in worker...")
+            
+            # Check MongoDB environment variables
+            mongodb_uri = os.getenv("MONGODB_URI")
+            mongodb_db_name = os.getenv("MONGODB_DB_NAME")
+            print(f"MONGODB_URI found: {'Yes' if mongodb_uri else 'No'}")
+            print(f"MONGODB_DB_NAME found: {'Yes' if mongodb_db_name else 'No'}")
 
             # Create a new event loop
             loop = asyncio.new_event_loop()
@@ -38,7 +45,7 @@ def post_fork(server, worker):
             
             try:
                 # Call the run_bot function without arguments
-                # It will get ROOM_ID and BOT_TOKEN from environment variables
+                # It will initialize MongoDB and get environment variables itself
                 loop.run_until_complete(run_bot())
             except Exception as e:
                 print(f"Bot initialization error: {e}")
@@ -58,6 +65,14 @@ def post_fork(server, worker):
                             print(f"Cause: {e.__cause__}")
                     except Exception as extract_error:
                         print(f"Failed to extract inner exception: {extract_error}")
+                        
+                # Special handling for MongoDB connection errors
+                if "MongoDB" in str(e) or "mongo" in str(e).lower():
+                    print("\n💡 MongoDB connection troubleshooting:")
+                    print("   • Check that your MONGODB_URI environment variable is set correctly")
+                    print("   • Verify network connectivity to your MongoDB server")
+                    print("   • Ensure IP allowlisting is configured in MongoDB Atlas")
+                    print("   • Run test_mongodb_connection.py script for detailed diagnostics")
         except Exception as e:
             print(f"Bot thread error: {e}")
 

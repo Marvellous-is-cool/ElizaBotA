@@ -24,15 +24,23 @@ def start_bot_thread():
     # Import here to avoid circular imports
     from safe_main import run_bot
     import asyncio
+    from db.mongo_client import MongoDBClient
     
     print("Starting Matchmaking Bot...")
+    
+    # Check MongoDB environment variables
+    import os
+    mongodb_uri = os.getenv("MONGODB_URI")
+    mongodb_db_name = os.getenv("MONGODB_DB_NAME")
+    print(f"MONGODB_URI found: {'Yes' if mongodb_uri else 'No'}")
+    print(f"MONGODB_DB_NAME found: {'Yes' if mongodb_db_name else 'No'}")
     
     # Create a new event loop for the bot
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-        # Call run_bot without arguments - it will get environment variables itself
+        # Call run_bot without arguments - it will initialize MongoDB and get environment variables itself
         loop.run_until_complete(run_bot())
     except Exception as e:
         print(f"Bot initialization error: {e}")
@@ -52,6 +60,14 @@ def start_bot_thread():
                     print(f"Cause: {e.__cause__}")
             except Exception as extract_error:
                 print(f"Failed to extract inner exception: {extract_error}")
+        
+        # Special handling for MongoDB connection errors
+        if "MongoDB" in str(e) or "mongo" in str(e).lower():
+            print("\n💡 MongoDB connection troubleshooting:")
+            print("   • Check that your MONGODB_URI environment variable is set correctly")
+            print("   • Verify network connectivity to your MongoDB server")
+            print("   • Ensure IP allowlisting is configured in MongoDB Atlas")
+            print("   • Run test_mongodb_connection.py script for detailed diagnostics")
     except Exception as e:
         print(f"Bot crashed with error: {e}")
     finally:
