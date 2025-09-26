@@ -22,7 +22,7 @@ running_under_gunicorn = 'gunicorn' in os.environ.get('SERVER_SOFTWARE', '')
 def start_bot_thread():
     """Start the Highrise bot in a separate thread"""
     # Import here to avoid circular imports
-    from main import main
+    from safe_main import run_bot
     import asyncio
     
     print("Starting Matchmaking Bot...")
@@ -32,8 +32,26 @@ def start_bot_thread():
     asyncio.set_event_loop(loop)
     
     try:
-        # Call main without arguments - it will get environment variables itself
-        loop.run_until_complete(main())
+        # Call run_bot without arguments - it will get environment variables itself
+        loop.run_until_complete(run_bot())
+    except Exception as e:
+        print(f"Bot initialization error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        # Print the full traceback for debugging
+        import traceback
+        traceback.print_exc()
+        
+        # For TaskGroup errors, try to extract the inner exception
+        if "TaskGroup" in str(e):
+            print("Attempting to extract inner TaskGroup exception...")
+            try:
+                # This is a common pattern for extracting inner exceptions from TaskGroup
+                if hasattr(e, "__context__") and e.__context__:
+                    print(f"Inner exception: {e.__context__}")
+                if hasattr(e, "__cause__") and e.__cause__:
+                    print(f"Cause: {e.__cause__}")
+            except Exception as extract_error:
+                print(f"Failed to extract inner exception: {extract_error}")
     except Exception as e:
         print(f"Bot crashed with error: {e}")
     finally:

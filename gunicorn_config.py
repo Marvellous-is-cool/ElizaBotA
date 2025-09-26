@@ -25,9 +25,10 @@ def post_fork(server, worker):
     """Start the bot after forking a worker"""
     def start_bot_thread():
         try:
-            # Import the main function from your main.py
-            from main import main
+            # Import the safer run_bot function from safe_main.py
+            from safe_main import run_bot
             import asyncio
+            import sys
 
             print("Starting Matchmaking Bot in worker...")
 
@@ -35,9 +36,28 @@ def post_fork(server, worker):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-            # Call the main function without arguments
-            # It will get ROOM_ID and BOT_TOKEN from environment variables
-            loop.run_until_complete(main())
+            try:
+                # Call the run_bot function without arguments
+                # It will get ROOM_ID and BOT_TOKEN from environment variables
+                loop.run_until_complete(run_bot())
+            except Exception as e:
+                print(f"Bot initialization error: {e}")
+                print(f"Error type: {type(e).__name__}")
+                # Print the full traceback for debugging
+                import traceback
+                traceback.print_exc()
+                
+                # For TaskGroup errors, try to extract the inner exception
+                if "TaskGroup" in str(e):
+                    print("Attempting to extract inner TaskGroup exception...")
+                    try:
+                        # This is a common pattern for extracting inner exceptions from TaskGroup
+                        if hasattr(e, "__context__") and e.__context__:
+                            print(f"Inner exception: {e.__context__}")
+                        if hasattr(e, "__cause__") and e.__cause__:
+                            print(f"Cause: {e.__cause__}")
+                    except Exception as extract_error:
+                        print(f"Failed to extract inner exception: {extract_error}")
         except Exception as e:
             print(f"Bot thread error: {e}")
 
