@@ -31,7 +31,7 @@ def post_fork(server, worker):
             bot_definition = BotDefinition(
                 bot=Bot,
                 room_id=os.getenv("ROOM_ID"),
-                api_key=os.getenv("BOT_TOKEN"),
+                token=os.getenv("BOT_TOKEN"),
             )
 
             loop = asyncio.new_event_loop()
