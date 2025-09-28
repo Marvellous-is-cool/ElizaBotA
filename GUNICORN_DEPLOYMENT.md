@@ -36,14 +36,17 @@ python run.py
 Set these in your Render dashboard:
 
 **Required:**
+
 - `ROOM_ID`: Your Highrise room ID
 - `BOT_TOKEN`: Your Highrise bot token
 
 **Optional:**
+
 - `MONGODB_URI`: Your MongoDB connection string
 - `MONGODB_DB_NAME`: Your database name (defaults to "MatchShowBot")
 
 **Automatic:**
+
 - `PORT`: Set automatically by Render
 
 ### 2. Deploy with render.yaml
@@ -60,6 +63,7 @@ services:
 ```
 
 This will:
+
 1. Install dependencies during build
 2. Start Gunicorn with the proper WSGI application
 3. Automatically start the bot in a background thread
@@ -86,6 +90,7 @@ If not using `render.yaml`:
 ### Logs
 
 Check Render logs for:
+
 - "Starting bot in worker 0" - Bot initialization
 - MongoDB connection status
 - Highrise connection status
@@ -103,6 +108,7 @@ Check Render logs for:
 ### "No application module specified" Error
 
 This error is fixed in the current configuration. If you see it:
+
 1. Verify `wsgi.py` exports `application`
 2. Check `render.yaml` uses `wsgi:application` not `wsgi:app`
 
@@ -121,11 +127,13 @@ This error is fixed in the current configuration. If you see it:
 ## Development vs Production
 
 **Development (`run.py`):**
+
 - Direct bot execution
 - Flask runs in main thread
 - Good for testing and debugging
 
 **Production (Gunicorn):**
+
 - WSGI-compliant web server
 - Bot runs in background thread
 - Proper process management
@@ -134,15 +142,18 @@ This error is fixed in the current configuration. If you see it:
 ## Maintenance
 
 **Updates:**
+
 1. Push to Git repository
 2. Render auto-deploys from main branch
 
 **Monitoring:**
+
 - Set up Render alerts for failures
 - Monitor `/health` endpoint
 - Check logs regularly for errors
 
 **Scaling:**
+
 - Current setup uses 1 worker (recommended for this bot)
 - Bot state is maintained in MongoDB
 - Can handle multiple concurrent web requests
@@ -150,7 +161,7 @@ This error is fixed in the current configuration. If you see it:
 ## Files Reference
 
 - `wsgi.py`: WSGI application entry point
-- `webserver.py`: Flask app + bot management  
+- `webserver.py`: Flask app + bot management
 - `gunicorn_config.py`: Gunicorn configuration
 - `render.yaml`: Render deployment config
 - `test_wsgi_setup.py`: Setup verification script

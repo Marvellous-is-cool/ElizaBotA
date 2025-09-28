@@ -48,31 +48,48 @@ class Bot(BaseBot):
         self.subscribers = []  # List of users to remind when show starts
         
     async def initialize_services(self):
-        """Initialize database and services"""
+        """Initialize database and services with retry logic"""
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"🔗 Initializing database connection (attempt {attempt + 1}/{max_retries})...")
+                
+                # Initialize database
+                self.db_client = await initialize_db()
+                
+                if self.db_client and self.db_client.is_connected:
+                    print("✅ Database connected successfully")
+                    
+                    # Initialize matchmaking service
+                    self.matchmaking = MatchmakingService(self.db_client)
+                    
+                    # Load hosts, VIPs, event date and subscribers from MongoDB
+                    await self.load_match_show_data()
+                    
+                    # Load bot position from MongoDB
+                    await self.load_bot_data()
+                    
+                    return True
+                    
+            except Exception as e:
+                print(f"❌ Database initialization error (attempt {attempt + 1}): {e}")
+                
+            if attempt < max_retries - 1:
+                print(f"Retrying database connection in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+        
+        print("⚠️ Database connection failed after all retries, using fallback mode")
+        
         try:
-            # Initialize database
-            self.db_client = await initialize_db()
-            
-            if self.db_client and self.db_client.is_connected:
-                # Initialize matchmaking service
-                self.matchmaking = MatchmakingService(self.db_client)
-                
-                # Load hosts, VIPs, event date and subscribers from MongoDB
-                await self.load_match_show_data()
-                
-                # Load bot position from MongoDB
-                await self.load_bot_data()
-                
-                return True
-            else:
-                # Set default position if MongoDB not available
-                await self.load_bot_data()
-                return False
-        except Exception as e:
-            logger.error(f"Failed to initialize services: {str(e)}")
             # Set default position on error
             await self.load_bot_data()
-            return False
+        except:
+            pass  # Fallback to hardcoded defaults
+            
+        return False
             
     async def load_match_show_data(self):
         """Load Match Show data from MongoDB"""
@@ -342,6 +359,9 @@ class Bot(BaseBot):
             self.match_prompt_task.cancel()
         
         self.match_prompt_task = asyncio.create_task(self.send_match_prompts_periodically())
+        
+        # Also start health monitoring
+        self.health_task = asyncio.create_task(self.health_monitor_loop())
 
     async def send_match_prompts_periodically(self):
         """Send matchmaking prompts periodically"""
@@ -361,6 +381,37 @@ class Bot(BaseBot):
                 break
             except Exception as e:
                 await asyncio.sleep(self.match_prompt_interval)
+
+    async def health_monitor_loop(self):
+        """Monitor bot health and database connectivity"""
+        check_interval = 300  # 5 minutes
+        
+        while True:
+            try:
+                await asyncio.sleep(check_interval)
+                
+                # Check database connection
+                if self.db_client:
+                    try:
+                        # Simple ping to check if connection is alive
+                        await self.db_client.admin.command('ping')
+                        print(f"💊 Health check passed at {datetime.now()}")
+                    except Exception as e:
+                        print(f"⚠️ Database health check failed: {e}")
+                        # Try to reconnect
+                        print("🔄 Attempting to reconnect to database...")
+                        services_ok = await self.initialize_services()
+                        if services_ok:
+                            print("✅ Database reconnected successfully")
+                        else:
+                            print("❌ Database reconnection failed")
+                
+            except asyncio.CancelledError:
+                print("💊 Health monitor stopped")
+                break
+            except Exception as e:
+                print(f"❌ Health monitor error: {e}")
+                await asyncio.sleep(60)  # Short delay before retrying
 
     async def find_user_registration(self, search_term):
         """Find a user's registration by username or user_id

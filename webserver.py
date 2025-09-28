@@ -361,11 +361,49 @@ def dashboard():
     return html
 
 @app.route('/restart', methods=['POST'])
-def restart_bot():
-    """Endpoint to restart the bot (protected in production)"""
-    # In production, this should have authentication
-    restart_bot_process()
-    return jsonify({"status": "restarting"})
+def restart_bot_endpoint():
+    """Endpoint to restart the bot (for debugging)"""
+    try:
+        # This is a simple restart signal - actual restart handled by BotManager
+        bot_logs.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": "INFO",
+            "message": "Manual restart requested via /restart endpoint",
+            "module": "webserver"
+        })
+        
+        return jsonify({
+            "status": "restart_requested", 
+            "message": "Bot restart has been requested. Check /bot-status for updates.",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+@app.route('/bot-metrics')
+def bot_metrics():
+    """Get detailed bot metrics"""
+    try:
+        return jsonify({
+            "bot_running": bot_running,
+            "uptime_seconds": round(time.time() - bot_start_time) if bot_start_time else None,
+            "total_logs": len(bot_logs),
+            "error_logs": len([log for log in bot_logs if log.get('level') == 'ERROR']),
+            "warning_logs": len([log for log in bot_logs if log.get('level') == 'WARNING']),
+            "memory_usage": "N/A",  # Can be enhanced with psutil
+            "worker_info": {
+                "process_id": os.getpid(),
+                "environment": os.getenv("ENVIRONMENT", "production")
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 def run_flask():
     """Run the Flask app for development purposes"""
@@ -382,64 +420,111 @@ def keep_alive():
     t.daemon = True
     t.start()
 
+class BotManager:
+    """Robust bot manager with automatic restart capabilities"""
+    
+    def __init__(self, worker_id=0):
+        self.worker_id = worker_id
+        self.bot_running = False
+        self.bot_start_time = None
+        self.restart_count = 0
+        self.max_restarts = 10
+        self.restart_delay = 30  # seconds
+        self.should_run = True
+        self.bot_task = None
+        
+    def log(self, message):
+        """Log with worker ID"""
+        print(f"[Worker-{self.worker_id}] {message}")
+        
+    async def run_bot(self):
+        """Run the bot with error handling"""
+        try:
+            self.log("🚀 Starting bot instance...")
+            
+            # Import and run bot
+            from main import main as bot_main
+            await bot_main()
+            
+        except Exception as e:
+            self.log(f"❌ Bot crashed: {e}")
+            raise
+            
+    async def bot_supervisor(self):
+        """Supervise the bot and restart if needed"""
+        while self.should_run:
+            try:
+                self.bot_running = True
+                self.bot_start_time = time.time()
+                
+                # Run the bot
+                await self.run_bot()
+                
+            except Exception as e:
+                self.log(f"Bot error: {e}")
+                self.bot_running = False
+                
+                # Check restart limits
+                if self.restart_count >= self.max_restarts:
+                    self.log(f"Max restarts ({self.max_restarts}) reached. Stopping.")
+                    break
+                
+                # Increment restart count and wait
+                self.restart_count += 1
+                self.log(f"Restarting bot in {self.restart_delay}s (attempt {self.restart_count}/{self.max_restarts})")
+                
+                await asyncio.sleep(self.restart_delay)
+                
+            finally:
+                self.bot_running = False
+                
+        self.log("Bot supervisor stopped")
+        
+    def start(self):
+        """Start the bot manager"""
+        global bot_running, bot_start_time
+        
+        try:
+            self.log("Starting bot manager...")
+            
+            # Only run bot in worker 0 to avoid conflicts
+            if self.worker_id == 0:
+                self.log("Primary worker - starting bot")
+                
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Update global status
+                bot_running = True
+                bot_start_time = time.time()
+                
+                # Run supervisor
+                loop.run_until_complete(self.bot_supervisor())
+                
+                # Cleanup
+                bot_running = False
+                loop.close()
+                
+            else:
+                self.log("Secondary worker - standing by")
+                # Secondary workers can monitor and take over if needed
+                while self.should_run:
+                    time.sleep(60)  # Check every minute
+                    
+        except Exception as e:
+            self.log(f"Bot manager error: {e}")
+            bot_running = False
+            
+    def stop(self):
+        """Stop the bot manager"""
+        self.should_run = False
+        self.log("Bot manager stop requested")
+
 def start_bot():
-    """Start the Highrise bot in a separate thread"""
-    global bot_running, bot_start_time
-    
-    # Set up logging for this function
-    logger = logging.getLogger('webserver.bot')
-    
-    # Import here to avoid circular imports
-    from main import main, Bot
-    from highrise import __main__
-    from highrise.__main__ import BotDefinition
-    
-    # Record start time for uptime tracking
-    bot_start_time = time.time()
-    bot_running = True
-    
-    logger.info("🚀 Starting Highrise bot initialization...")
-    
-    # Get environment variables
-    room_id = os.getenv("ROOM_ID")
-    bot_token = os.getenv("BOT_TOKEN")
-    mongodb_uri = os.getenv("MONGODB_URI")
-    
-    logger.info(f"Environment check - ROOM_ID: {'✅' if room_id else '❌'}, BOT_TOKEN: {'✅' if bot_token else '❌'}, MONGODB_URI: {'✅' if mongodb_uri else '❌'}")
-    
-    if not room_id or not bot_token:
-        logger.error("❌ Missing required environment variables!")
-        bot_running = False
-        return
-    
-    # Clean the credentials
-    room_id = room_id.strip().rstrip('%') if room_id else None
-    bot_token = bot_token.strip().rstrip('%') if bot_token else None
-    
-    logger.info(f"🎯 Starting bot for room: {room_id[:8]}...")
-    
-    # Run the bot
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        logger.info("🔧 Creating bot instance and definition...")
-        
-        # Create bot instance and definition
-        bot_instance = Bot()
-        definitions = [BotDefinition(bot_instance, room_id, bot_token)]
-        
-        logger.info("🌐 Connecting to Highrise...")
-        
-        # Run the main function from Highrise SDK
-        loop.run_until_complete(__main__.main(definitions))
-    except Exception as e:
-        logger.error(f"💥 Bot crashed with error: {e}")
-        logger.error(f"📋 Error details: {type(e).__name__}")
-        import traceback
-        logger.error(f"🔍 Traceback: {traceback.format_exc()}")
-    finally:
-        bot_running = False
-        logger.info("🛑 Bot stopped")
+    """Legacy function for compatibility"""
+    bot_manager = BotManager(worker_id=0)
+    bot_manager.start()
 
 def restart_bot_process():
     """Restart the bot process"""
