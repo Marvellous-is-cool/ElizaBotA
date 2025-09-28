@@ -6,7 +6,7 @@ from threading import Thread
 
 # Get the PORT environment variable and convert it to an integer
 # Render sets this automatically, and we need to respect it
-port = int(os.getenv('PORT', '10000'))
+port = int(os.getenv('PORT', '6000'))
 bind = f"0.0.0.0:{port}"
 workers = 4  # Multiple workers for robustness
 worker_class = 'sync'
