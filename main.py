@@ -12,6 +12,9 @@ from highrise.models import *
 from highrise.webapi import *
 from functions.equip import equip
 from functions.remove import remove
+from functions.emote_system import (
+    emote, fight, hug, flirt, emotes, allemo, emo, single_emote
+)
 from config import MATCH_PROMPT_INTERVAL, BOT_NAME, MATCH_PROMPTS
 from dotenv import load_dotenv
 from db.init_db import initialize_db
@@ -2148,6 +2151,31 @@ class Bot(BaseBot):
                     await self.highrise.chat("Only the room owner and hosts can send notifications! 🔒")
                 return
             
+            # Emote Commands
+            if lower_msg.startswith("!emote"):
+                await emote(self, user, message)
+                return
+            
+            if lower_msg.startswith("!fight"):
+                await fight(self, user, message)
+                return
+            
+            if lower_msg.startswith("!hug"):
+                await hug(self, user, message)
+                return
+            
+            if lower_msg.startswith("!flirt"):
+                await flirt(self, user, message)
+                return
+            
+            if lower_msg in ["!emotes", "emotes", "!allemo", "allemo"]:
+                await emotes(self, user, message)
+                return
+            
+            if lower_msg in ["!emo", "emo"]:
+                await emo(self, user, message)
+                return
+            
             # Help command
             if lower_msg in ["!help", "help", "commands"]:
                 help_text = (
@@ -2158,6 +2186,14 @@ class Bot(BaseBot):
                     "• Send '!SUB' to get notified when the show starts\n"
                     "• !equip <item_name> - Equip clothing item\n"
                     "• !remove <category> - Remove clothing category\n\n"
+                    "[Emotes & Fun]\n"
+                    "• Type 'kiss', 'wave', 'dance' etc. to do emotes\n"
+                    "• Add 'all' (e.g., 'kiss all') to make everyone do it\n"
+                    "• !emote @username emotename - Make someone do an emote\n"
+                    "• !fight @username - Sword fight with someone\n"
+                    "• !hug @username - Hug someone\n"
+                    "• !flirt @username - Flirt with someone\n"
+                    "• !emotes - See all available emotes\n\n"
                 )
                 
                 # Always show host commands to owner
@@ -2189,6 +2225,12 @@ class Bot(BaseBot):
                     help_text += f"📅 Next Match Show: {self.event_date}\n"
                 
                 await self.highrise.chat(help_text)
+                return
+            
+            # Single emote detection (must be at the end to avoid conflicts with commands)
+            # Check if user typed a single emote name or "emote all"
+            emote_handled = await single_emote(self, user, message)
+            if emote_handled:
                 return
                 
         except Exception as e:
