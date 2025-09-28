@@ -13,7 +13,8 @@ from highrise.webapi import *
 from functions.equip import equip
 from functions.remove import remove
 from functions.emote_system import (
-    emote, fight, hug, flirt, emotes, allemo, emo, single_emote
+    emote, fight, hug, flirt, emotes, allemo, emo, single_emote,
+    loop, stoploop, numbers, number_emote
 )
 from config import MATCH_PROMPT_INTERVAL, BOT_NAME, MATCH_PROMPTS
 from dotenv import load_dotenv
@@ -2168,12 +2169,28 @@ class Bot(BaseBot):
                 await flirt(self, user, message)
                 return
             
-            if lower_msg in ["!emotes", "emotes", "!allemo", "allemo"]:
+            if lower_msg in ["!emotes", "emotes"]:
                 await emotes(self, user, message)
+                return
+            
+            if lower_msg.startswith("!allemo"):
+                await allemo(self, user, message)
                 return
             
             if lower_msg in ["!emo", "emo"]:
                 await emo(self, user, message)
+                return
+            
+            if lower_msg.startswith("!loop"):
+                await loop(self, user, message)
+                return
+            
+            if lower_msg.startswith("!stoploop") or lower_msg == "!stop":
+                await stoploop(self, user, message)
+                return
+            
+            if lower_msg in ["!numbers", "numbers"]:
+                await numbers(self, user, message)
                 return
             
             # Help command
@@ -2189,11 +2206,14 @@ class Bot(BaseBot):
                     "[Emotes & Fun]\n"
                     "• Type 'kiss', 'wave', 'dance' etc. to do emotes\n"
                     "• Add 'all' (e.g., 'kiss all') to make everyone do it\n"
+                    "• Type numbers 1-50 for quick emotes (!numbers for list)\n"
                     "• !emote @username emotename - Make someone do an emote\n"
+                    "• !loop emotename [duration] [@user] - Loop emote (VIP+ for others)\n"
                     "• !fight @username - Sword fight with someone\n"
                     "• !hug @username - Hug someone\n"
                     "• !flirt @username - Flirt with someone\n"
-                    "• !emotes - See all available emotes\n\n"
+                    "• !emotes - See all available emotes\n"
+                    "• !allemo emotions/dances/poses/actions/idle/emojis\n\n"
                 )
                 
                 # Always show host commands to owner
@@ -2227,6 +2247,10 @@ class Bot(BaseBot):
                 await self.highrise.chat(help_text)
                 return
             
+            # Number emote detection (check for numbered emotes first)
+            if await number_emote(self, user, message):
+                return
+            
             # Single emote detection (must be at the end to avoid conflicts with commands)
             # Check if user typed a single emote name or "emote all"
             emote_handled = await single_emote(self, user, message)
@@ -2238,56 +2262,73 @@ class Bot(BaseBot):
             await self.highrise.chat("Sorry, something went wrong! Please try again. 🤖")
 
 async def main():
+    """Main function with TaskGroup error handling"""
     # Get credentials from environment variables
     room_id = os.getenv("ROOM_ID")
     bot_token = os.getenv("BOT_TOKEN")
     
     # Debug information
-    logger.info(f"Starting matchmaking bot")
-    logger.info(f"ROOM_ID found: {'Yes' if room_id else 'No'}")
-    logger.info(f"BOT_TOKEN found: {'Yes' if bot_token else 'No'}")
+    print(f"🚀 Starting matchmaking bot")
+    print(f"📍 ROOM_ID found: {'Yes' if room_id else 'No'}")
+    print(f"🔑 BOT_TOKEN found: {'Yes' if bot_token else 'No'}")
     
     if not room_id:
-        logger.error("ROOM_ID not found in environment variables!")
         print("❌ Error: ROOM_ID not found in environment variables!")
-        print("Please set ROOM_ID in your .env file")
-        return
+        return False
     
     if not bot_token:
-        logger.error("BOT_TOKEN not found in environment variables!")
         print("❌ Error: BOT_TOKEN not found in environment variables!")
-        print("Please set BOT_TOKEN in your .env file")
-        return
+        return False
     
     # Clean the credentials (remove any trailing % or whitespace)
     room_id = room_id.strip().rstrip('%') if room_id else None
     bot_token = bot_token.strip().rstrip('%') if bot_token else None
     
-    logger.info(f"Starting bot for room: {room_id}")
+    print(f"🎯 Starting bot for room: {room_id}")
     
-    try:
-        definitions = [BotDefinition(Bot(), room_id, bot_token)]
-        await __main__.main(definitions)
-    except Exception as e:
-        logger.error(f"Bot connection failed: {e}")
-        print(f"❌ Bot connection failed: {e}")
-        
-        # Check for TaskGroup/ExceptionGroup error
-        if "TaskGroup" in str(e) or "ExceptionGroup" in str(e):
-            print("💡 TaskGroup error detected - this is often a connection issue")
-            print("   • This will auto-retry with exponential backoff")
-            print("   • Check bot token and room ID validity")
-        elif "Invalid room id" in str(e):
-            print("💡 Room ID troubleshooting:")
-            print("   • Make sure the ROOM_ID in your .env file is correct")
-            print("   • The bot must be invited to the room as a bot")
-            print("   • Check that the room exists and is accessible")
-        elif "API token not found" in str(e) or "Invalid token" in str(e):
-            print("💡 Bot token troubleshooting:")
-            print("   • Make sure your BOT_TOKEN in .env is correct and complete")
-            print("   • Verify the token is from your Highrise developer account")
-            print("   • Check for any extra characters or spaces")
-        raise
+    # Multiple retry attempts for TaskGroup errors
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            print(f"🔄 Connection attempt {attempt + 1}/{max_attempts}")
+            
+            # Create fresh bot instance for each attempt
+            bot_instance = Bot()
+            definitions = [BotDefinition(bot_instance, room_id, bot_token)]
+            
+            # Try to connect
+            await __main__.main(definitions)
+            print("✅ Bot connected successfully!")
+            return True
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Attempt {attempt + 1} failed: {error_msg}")
+            
+            # Handle different error types
+            if "TaskGroup" in error_msg or "ExceptionGroup" in error_msg:
+                print("💡 TaskGroup error - this is a known connection issue")
+                if attempt < max_attempts - 1:
+                    delay = 10 * (attempt + 1)  # 10s, 20s, 30s delays
+                    print(f"⏳ Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    print("❌ Max attempts reached for TaskGroup error")
+                    
+            elif "Invalid room id" in error_msg:
+                print("💡 Room ID issue - check your ROOM_ID")
+                break
+                
+            elif "token" in error_msg.lower():
+                print("💡 Token issue - check your BOT_TOKEN") 
+                break
+                
+            # For other errors, don't retry
+            break
+    
+    print("❌ Bot connection failed after all attempts")
+    return False
 
 
 if __name__ == "__main__":

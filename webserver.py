@@ -476,9 +476,9 @@ class BotManager:
         try:
             self.log("🚀 Starting bot instance...")
             
-            # Import and run bot
-            from main import main as bot_main
-            await bot_main()
+            # Use safer bot launcher
+            from safe_bot import safe_bot_main
+            await safe_bot_main()
             
         except Exception as e:
             self.log(f"❌ Bot crashed: {e}")
