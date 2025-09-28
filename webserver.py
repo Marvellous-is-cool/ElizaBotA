@@ -383,6 +383,40 @@ def restart_bot_endpoint():
             "error": str(e)
         }), 500
 
+@app.route('/force-restart', methods=['POST'])
+def force_restart_bot():
+    """Force restart the entire service (emergency use)"""
+    try:
+        bot_logs.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": "WARNING",
+            "message": "FORCE RESTART requested - shutting down service",
+            "module": "webserver"
+        })
+        
+        # Log the restart request
+        import os
+        import signal
+        
+        def shutdown_server():
+            import time
+            time.sleep(1)  # Give time for response
+            os.kill(os.getpid(), signal.SIGTERM)
+        
+        from threading import Thread
+        Thread(target=shutdown_server, daemon=True).start()
+        
+        return jsonify({
+            "status": "force_restarting",
+            "message": "Service will restart in 1 second. Render will automatically restart it.",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error", 
+            "error": str(e)
+        }), 500
+
 @app.route('/bot-metrics')
 def bot_metrics():
     """Get detailed bot metrics"""
@@ -428,7 +462,7 @@ class BotManager:
         self.bot_running = False
         self.bot_start_time = None
         self.restart_count = 0
-        self.max_restarts = 10
+        self.max_restarts = 20  # Increased for TaskGroup errors
         self.restart_delay = 30  # seconds
         self.should_run = True
         self.bot_task = None
@@ -464,6 +498,10 @@ class BotManager:
                 self.log(f"Bot error: {e}")
                 self.bot_running = False
                 
+                # Special handling for TaskGroup errors
+                if "TaskGroup" in str(e) or "ExceptionGroup" in str(e):
+                    self.log("TaskGroup error detected - likely connection issue")
+                
                 # Check restart limits
                 if self.restart_count >= self.max_restarts:
                     self.log(f"Max restarts ({self.max_restarts}) reached. Stopping.")
@@ -471,9 +509,15 @@ class BotManager:
                 
                 # Increment restart count and wait
                 self.restart_count += 1
-                self.log(f"Restarting bot in {self.restart_delay}s (attempt {self.restart_count}/{self.max_restarts})")
                 
-                await asyncio.sleep(self.restart_delay)
+                # Exponential backoff for TaskGroup errors
+                delay = self.restart_delay
+                if "TaskGroup" in str(e):
+                    delay = min(self.restart_delay * (2 ** min(self.restart_count - 1, 4)), 300)
+                
+                self.log(f"Restarting bot in {delay}s (attempt {self.restart_count}/{self.max_restarts})")
+                
+                await asyncio.sleep(delay)
                 
             finally:
                 self.bot_running = False

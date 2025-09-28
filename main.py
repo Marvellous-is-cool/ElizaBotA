@@ -2229,7 +2229,13 @@ async def main():
     except Exception as e:
         logger.error(f"Bot connection failed: {e}")
         print(f"❌ Bot connection failed: {e}")
-        if "Invalid room id" in str(e):
+        
+        # Check for TaskGroup/ExceptionGroup error
+        if "TaskGroup" in str(e) or "ExceptionGroup" in str(e):
+            print("💡 TaskGroup error detected - this is often a connection issue")
+            print("   • This will auto-retry with exponential backoff")
+            print("   • Check bot token and room ID validity")
+        elif "Invalid room id" in str(e):
             print("💡 Room ID troubleshooting:")
             print("   • Make sure the ROOM_ID in your .env file is correct")
             print("   • The bot must be invited to the room as a bot")
