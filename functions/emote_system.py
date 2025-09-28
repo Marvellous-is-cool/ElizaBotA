@@ -57,6 +57,9 @@ NUMBERED_EMOTES = [
 # Global loop tasks storage
 ACTIVE_LOOPS = {}
 
+# Default loop interval for all emotes
+DEFAULT_EMOTE_INTERVAL = 4  # seconds between emote repeats
+
 async def find_user_by_username(bot: BaseBot, username: str) -> str | None:
     """Find a user ID by username in the room"""
     try:
@@ -94,7 +97,7 @@ async def get_emote_id_from_name(emote_name: str) -> str | None:
     return None
 
 async def single_emote(bot: BaseBot, user: User, message: str) -> bool:
-    """Handle single emote commands (user types 'kiss' and does emote-kiss)"""
+    """Handle single emote commands (user types 'kiss' and does emote-kiss) - Now with auto-loop!"""
     try:
         message_lower = message.lower().strip()
         
@@ -104,26 +107,58 @@ async def single_emote(bot: BaseBot, user: User, message: str) -> bool:
             emote_id = await get_emote_id_from_name(emote_name)
             
             if emote_id:
-                # Get all room users and send emote to everyone
+                # Stop any existing loop for this user
+                await stop_user_loop(bot, user.id, user.username)
+                
+                # Get all room users and start group loop
                 room_users = await bot.highrise.get_room_users()
-                emote_count = 0
+                user_ids = [room_user.id for room_user, _ in room_users.content]
                 
-                for room_user, _ in room_users.content:
-                    try:
-                        await bot.highrise.send_emote(emote_id, room_user.id)
-                        emote_count += 1
-                    except:
-                        continue  # Skip users that can't receive emotes
+                if user_ids:
+                    await bot.highrise.chat(f"🎭 {user.username} started {emote_name} loop for everyone! Say 'stop' to end it.")
+                    
+                    # Start group loop
+                    loop_key = f"group_{user.id}"
+                    loop_task = asyncio.create_task(
+                        group_emote_loop_task(bot, emote_id, user_ids, emote_name, user.username)
+                    )
+                    ACTIVE_LOOPS[loop_key] = {
+                        'task': loop_task,
+                        'starter': user.id,
+                        'type': 'group',
+                        'emote_name': emote_name
+                    }
+                    
+                    # Clean up when done
+                    loop_task.add_done_callback(lambda t: cleanup_loop(loop_key))
                 
-                if emote_count > 0:
-                    await bot.highrise.chat(f"🎭 {user.username} made everyone {emote_name}! ({emote_count} users)")
                 return True
         
         # Check for single emote
         else:
             emote_id = await get_emote_id_from_name(message_lower)
             if emote_id:
-                await bot.highrise.send_emote(emote_id, user.id)
+                # Stop any existing loop for this user
+                await stop_user_loop(bot, user.id, user.username)
+                
+                # Start new infinite loop for this emote
+                emote_name = message_lower
+                await bot.highrise.chat(f"🔄 {user.username} started {emote_name} loop! Use another emote or say 'stop' to change.")
+                
+                loop_key = f"single_{user.id}"
+                loop_task = asyncio.create_task(
+                    infinite_emote_loop_task(bot, emote_id, user.id, emote_name, user.username)
+                )
+                ACTIVE_LOOPS[loop_key] = {
+                    'task': loop_task,
+                    'starter': user.id,
+                    'type': 'single',
+                    'emote_name': emote_name
+                }
+                
+                # Clean up when done
+                loop_task.add_done_callback(lambda t: cleanup_loop(loop_key))
+                
                 return True
         
         return False
@@ -260,8 +295,8 @@ async def emotes(bot: BaseBot, user: User, message: str) -> None:
     Show available emotes organized by category
     """
     try:
-        await bot.highrise.chat("🎭 **Available Emotes** 🎭")
-        await bot.highrise.chat("💡 Type emote name to use it, or 'emotename all' for everyone!")
+        await bot.highrise.chat("🎭 **Available Emotes - ALL LOOP FOREVER!** 🔄")
+        await bot.highrise.chat("💡 Type emote name = infinite loop | 'emotename all' = everyone loops!")
         
         # Show each category
         for category, emote_list in EMOTE_CATEGORIES.items():
@@ -270,7 +305,8 @@ async def emotes(bot: BaseBot, user: User, message: str) -> None:
                 emote_names += f"... ({len(emote_list)} total)"
             await bot.highrise.chat(f"**{category.title()}:** {emote_names}")
         
-        await bot.highrise.chat("💡 Commands: !emote @user emotename, !fight @user, !hug @user, !flirt @user")
+        await bot.highrise.chat("� All emotes loop until you say 'stop' or use another emote!")
+        await bot.highrise.chat("💡 Commands: !numbers (1-50), !allemo category, !loop emote @user")
         
     except Exception as e:
         await bot.highrise.chat(f"❌ Error showing emotes: {e}")
@@ -331,8 +367,72 @@ async def allemo(bot: BaseBot, user: User, message: str) -> None:
     except Exception as e:
         await bot.highrise.chat(f"❌ Error showing category emotes: {e}")
 
+def cleanup_loop(loop_key: str):
+    """Clean up completed loop tasks"""
+    if loop_key in ACTIVE_LOOPS:
+        del ACTIVE_LOOPS[loop_key]
+
+async def stop_user_loop(bot: BaseBot, user_id: str, username: str) -> bool:
+    """Stop any active loops for a user"""
+    stopped = False
+    
+    # Find and cancel all loops for this user
+    for key, loop_info in list(ACTIVE_LOOPS.items()):
+        if (key == f"single_{user_id}" or 
+            key == f"group_{user_id}" or 
+            loop_info.get('starter') == user_id):
+            
+            loop_info['task'].cancel()
+            emote_name = loop_info.get('emote_name', 'emote')
+            del ACTIVE_LOOPS[key]
+            stopped = True
+    
+    return stopped
+
+async def infinite_emote_loop_task(bot: BaseBot, emote_id: str, user_id: str, emote_name: str, username: str):
+    """Background task for infinite emote looping until stopped"""
+    try:
+        while True:
+            try:
+                await bot.highrise.send_emote(emote_id, user_id)
+                await asyncio.sleep(DEFAULT_EMOTE_INTERVAL)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Infinite loop emote error: {e}")
+                await asyncio.sleep(1)  # Short delay before retry
+        
+    except asyncio.CancelledError:
+        pass  # Silent cancellation
+    except Exception as e:
+        await bot.highrise.chat(f"❌ {emote_name} loop error: {e}")
+
+async def group_emote_loop_task(bot: BaseBot, emote_id: str, user_ids: list, emote_name: str, starter_username: str):
+    """Background task for group emote looping"""
+    try:
+        while True:
+            try:
+                # Send emote to all users in the list
+                for user_id in user_ids:
+                    try:
+                        await bot.highrise.send_emote(emote_id, user_id)
+                    except:
+                        continue  # Skip users that can't receive emotes
+                
+                await asyncio.sleep(DEFAULT_EMOTE_INTERVAL)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Group loop emote error: {e}")
+                await asyncio.sleep(1)
+        
+    except asyncio.CancelledError:
+        pass  # Silent cancellation  
+    except Exception as e:
+        await bot.highrise.chat(f"❌ Group {emote_name} loop error: {e}")
+
 async def number_emote(bot: BaseBot, user: User, message: str) -> bool:
-    """Handle number emotes (1-50) for quick emote access"""
+    """Handle number emotes (1-50) for quick emote access - Now with auto-loop!"""
     try:
         message_clean = message.strip()
         
@@ -342,11 +442,29 @@ async def number_emote(bot: BaseBot, user: User, message: str) -> bool:
             
             if 1 <= number <= len(NUMBERED_EMOTES):
                 emote_id = NUMBERED_EMOTES[number - 1]
-                await bot.highrise.send_emote(emote_id, user.id)
+                
+                # Stop any existing loop for this user
+                await stop_user_loop(bot, user.id, user.username)
                 
                 # Get emote name for display
                 emote_name = emote_id.split('-')[-1] if '-' in emote_id else emote_id.split('_')[-1]
-                await bot.highrise.chat(f"🎭 {user.username} used emote #{number}: {emote_name}!")
+                await bot.highrise.chat(f"🔄 {user.username} started #{number} ({emote_name}) loop! Use another emote or say 'stop' to change.")
+                
+                # Start infinite loop
+                loop_key = f"single_{user.id}"
+                loop_task = asyncio.create_task(
+                    infinite_emote_loop_task(bot, emote_id, user.id, emote_name, user.username)
+                )
+                ACTIVE_LOOPS[loop_key] = {
+                    'task': loop_task,
+                    'starter': user.id,
+                    'type': 'single',
+                    'emote_name': emote_name
+                }
+                
+                # Clean up when done
+                loop_task.add_done_callback(lambda t: cleanup_loop(loop_key))
+                
                 return True
             else:
                 await bot.highrise.chat(f"❌ Number must be between 1-{len(NUMBERED_EMOTES)}. Use !numbers to see the list.")
@@ -379,23 +497,18 @@ async def numbers(bot: BaseBot, user: User, message: str) -> None:
         await bot.highrise.chat(f"❌ Error showing numbered emotes: {e}")
 
 async def loop(bot: BaseBot, user: User, message: str) -> None:
-    """Loop emote command - !loop emotename [duration] [@target] (target requires privileges)"""
+    """Loop emote command - !loop emotename [@target] (target requires privileges) - Now infinite by default!"""
     try:
         parts = message.split()
         
         if len(parts) < 2:
-            await bot.highrise.chat("💡 Usage: !loop emotename [duration] [@target]")
-            await bot.highrise.chat("Example: !loop kiss 30 (loops for 30 seconds)")
+            await bot.highrise.chat("💡 Usage: !loop emotename [@target]")
+            await bot.highrise.chat("Example: !loop kiss (loops forever until stopped)")
             return
         
         emote_name = parts[1].lower()
-        duration = 30  # default 30 seconds
         target_user_id = user.id  # default to self
         target_username = user.username
-        
-        # Parse duration if provided
-        if len(parts) >= 3 and parts[2].isdigit():
-            duration = min(int(parts[2]), 300)  # Max 5 minutes
         
         # Parse target if provided
         if len(parts) >= 3 and parts[-1].startswith("@"):
@@ -425,28 +538,26 @@ async def loop(bot: BaseBot, user: User, message: str) -> None:
             await bot.highrise.chat(f"❌ Emote '{emote_name}' not found. Use !emotes to see available emotes.")
             return
         
-        # Check if user already has an active loop
-        loop_key = f"{user.id}_{target_user_id}"
-        if loop_key in ACTIVE_LOOPS:
-            # Cancel existing loop
-            ACTIVE_LOOPS[loop_key].cancel()
-            await bot.highrise.chat(f"⏹️ Stopped previous loop for {target_username}")
+        # Stop any existing loop for the target user
+        await stop_user_loop(bot, target_user_id, target_username)
         
-        # Start new loop
-        await bot.highrise.chat(f"🔄 Started {emote_name} loop for {target_username} ({duration}s)")
+        # Start new infinite loop
+        await bot.highrise.chat(f"🔄 {user.username} started infinite {emote_name} loop for {target_username}! Say 'stop' to end it.")
         
         # Create loop task
+        loop_key = f"single_{target_user_id}"
         loop_task = asyncio.create_task(
-            emote_loop_task(bot, emote_id, target_user_id, duration, emote_name, target_username)
+            infinite_emote_loop_task(bot, emote_id, target_user_id, emote_name, target_username)
         )
-        ACTIVE_LOOPS[loop_key] = loop_task
+        ACTIVE_LOOPS[loop_key] = {
+            'task': loop_task,
+            'starter': user.id,
+            'type': 'single',
+            'emote_name': emote_name
+        }
         
         # Clean up when done
-        def cleanup_loop():
-            if loop_key in ACTIVE_LOOPS:
-                del ACTIVE_LOOPS[loop_key]
-        
-        loop_task.add_done_callback(lambda t: cleanup_loop())
+        loop_task.add_done_callback(lambda t: cleanup_loop(loop_key))
         
     except Exception as e:
         await bot.highrise.chat(f"❌ Error with loop command: {e}")
@@ -475,7 +586,7 @@ async def emote_loop_task(bot: BaseBot, emote_id: str, user_id: str, duration: i
         await bot.highrise.chat(f"❌ Loop error: {e}")
 
 async def stoploop(bot: BaseBot, user: User, message: str) -> None:
-    """Stop active emote loops - !stoploop [@target]"""
+    """Stop active emote loops - !stoploop [@target] or just 'stop'"""
     try:
         parts = message.split()
         target_user_id = user.id
@@ -502,21 +613,26 @@ async def stoploop(bot: BaseBot, user: User, message: str) -> None:
                 return
             target_username = target_username_input.replace("@", "")
         
-        # Find and cancel loop
-        loop_key = f"{user.id}_{target_user_id}"
-        found_loop = False
+        # Stop loops for this user
+        stopped = await stop_user_loop(bot, target_user_id, target_username)
         
-        # Also check for loops where user is the target
-        for key, task in list(ACTIVE_LOOPS.items()):
-            if key.endswith(f"_{target_user_id}"):
-                task.cancel()
-                del ACTIVE_LOOPS[key]
-                found_loop = True
-        
-        if found_loop:
-            await bot.highrise.chat(f"⏹️ Stopped loop for {target_username}")
+        if stopped:
+            await bot.highrise.chat(f"⏹️ Stopped emote loop for {target_username}")
         else:
             await bot.highrise.chat(f"❌ No active loop found for {target_username}")
         
+    except Exception as e:
+        await bot.highrise.chat(f"❌ Error stopping loop: {e}")
+
+async def stop(bot: BaseBot, user: User, message: str) -> None:
+    """Universal stop command - stops any active loops for the user"""
+    try:
+        stopped = await stop_user_loop(bot, user.id, user.username)
+        
+        if stopped:
+            await bot.highrise.chat(f"⏹️ {user.username} stopped their emote loop")
+        else:
+            await bot.highrise.chat(f"❌ {user.username} has no active loops to stop")
+            
     except Exception as e:
         await bot.highrise.chat(f"❌ Error stopping loop: {e}")

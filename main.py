@@ -14,7 +14,7 @@ from functions.equip import equip
 from functions.remove import remove
 from functions.emote_system import (
     emote, fight, hug, flirt, emotes, allemo, emo, single_emote,
-    loop, stoploop, numbers, number_emote
+    loop, stoploop, numbers, number_emote, stop
 )
 from config import MATCH_PROMPT_INTERVAL, BOT_NAME, MATCH_PROMPTS
 from dotenv import load_dotenv
@@ -2185,8 +2185,12 @@ class Bot(BaseBot):
                 await loop(self, user, message)
                 return
             
-            if lower_msg.startswith("!stoploop") or lower_msg == "!stop":
+            if lower_msg.startswith("!stoploop"):
                 await stoploop(self, user, message)
+                return
+            
+            if lower_msg in ["stop", "!stop"]:
+                await stop(self, user, message)
                 return
             
             if lower_msg in ["!numbers", "numbers"]:
@@ -2203,12 +2207,13 @@ class Bot(BaseBot):
                     "• Send '!SUB' to get notified when the show starts\n"
                     "• !equip <item_name> - Equip clothing item\n"
                     "• !remove <category> - Remove clothing category\n\n"
-                    "[Emotes & Fun]\n"
-                    "• Type 'kiss', 'wave', 'dance' etc. to do emotes\n"
-                    "• Add 'all' (e.g., 'kiss all') to make everyone do it\n"
-                    "• Type numbers 1-50 for quick emotes (!numbers for list)\n"
+                    "[Emotes & Fun] 🔄 ALL EMOTES LOOP FOREVER! 🔄\n"
+                    "• Type 'kiss', 'wave', 'dance' etc. - starts infinite loop!\n"
+                    "• Add 'all' (e.g., 'kiss all') - everyone loops forever!\n"
+                    "• Type numbers 1-50 for quick infinite loops\n"
+                    "• Say 'stop' or use another emote to change loops\n"
                     "• !emote @username emotename - Make someone do an emote\n"
-                    "• !loop emotename [duration] [@user] - Loop emote (VIP+ for others)\n"
+                    "• !loop emotename [@user] - Start infinite loop (VIP+ for others)\n"
                     "• !fight @username - Sword fight with someone\n"
                     "• !hug @username - Hug someone\n"
                     "• !flirt @username - Flirt with someone\n"
