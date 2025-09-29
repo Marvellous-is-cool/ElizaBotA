@@ -24,20 +24,36 @@ worker_connections = 1000
 max_worker_memory = 200  # MB
 
 def post_fork(server, worker):
-    """Start the bot manager after forking a worker"""
+    """Start the resilient bot manager after forking a worker"""
     # Start bot manager in all workers for redundancy
-    print(f"Initializing worker {worker.nr} with bot manager")
+    print(f"Initializing worker {worker.nr} with resilient bot manager")
     
-    # Import and start the bot manager from webserver
+    # Import both managers for comprehensive coverage
     from webserver import BotManager
+    from connection_resilience import ResilientBotManager
     import threading
+    import asyncio
     
-    # Create and start bot manager in this worker
+    # Create web-based bot manager for dashboard
     bot_manager = BotManager(worker_id=worker.nr)
     manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
     manager_thread.start()
     
-    print(f"Bot manager started in worker {worker.nr}")
+    # Create resilient connection manager for TaskGroup protection
+    def run_resilient_bot():
+        try:
+            resilient_manager = ResilientBotManager()
+            asyncio.run(resilient_manager.run_with_resilience())
+        except KeyboardInterrupt:
+            print(f"[Worker-{worker.nr}] 👋 Resilient bot shutdown requested")
+        except Exception as e:
+            print(f"[Worker-{worker.nr}] ❌ Resilient bot error: {e}")
+            # Let it restart automatically via cron
+    
+    resilient_thread = threading.Thread(target=run_resilient_bot, daemon=True)
+    resilient_thread.start()
+    
+    print(f"✅ Worker {worker.nr}: Web manager + Resilient connection manager started")
 
 def worker_int(worker):
     """Handle worker interruption"""

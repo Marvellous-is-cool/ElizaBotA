@@ -1,11 +1,11 @@
 """
 Safe bot launcher that handles TaskGroup errors properly
+Now uses the resilient connection manager
 """
 import asyncio
 import os
-from highrise import BaseBot, __main__
-from highrise.__main__ import BotDefinition
-from main import Bot
+import sys
+from connection_resilience import ResilientBotManager
 import logging
 
 # Configure logging
@@ -13,44 +13,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def safe_bot_main():
-    """Safe bot main with proper TaskGroup error handling"""
+    """Safe bot main using resilient connection manager"""
     try:
-        # Get credentials
-        room_id = os.getenv("ROOM_ID")
-        bot_token = os.getenv("BOT_TOKEN")
+        logger.info("🚀 Starting safe bot with resilient connection manager")
         
-        if not room_id or not bot_token:
-            logger.error("Missing ROOM_ID or BOT_TOKEN environment variables")
-            return
-            
-        # Clean credentials
-        room_id = room_id.strip().rstrip('%')
-        bot_token = bot_token.strip().rstrip('%')
+        # Create resilient manager
+        manager = ResilientBotManager()
         
-        logger.info(f"🚀 Starting safe bot launcher for room: {room_id}")
+        # Run with built-in TaskGroup protection
+        await manager.run_with_resilience()
         
-        # Create bot definition
-        bot_instance = Bot()
-        definitions = [BotDefinition(bot_instance, room_id, bot_token)]
-        
-        # Use asyncio.run directly to avoid TaskGroup issues
-        try:
-            await __main__.main(definitions)
-        except* Exception as eg:
-            # Handle ExceptionGroup properly in Python 3.11+
-            logger.error(f"Bot ExceptionGroup: {eg}")
-            for exc in eg.exceptions:
-                logger.error(f"  - {type(exc).__name__}: {exc}")
-            raise
-            
+    except KeyboardInterrupt:
+        logger.info("👋 Safe bot shutdown requested")
     except Exception as e:
         logger.error(f"Safe bot launcher error: {e}")
         raise
 
-if __name__ == "__main__":
+def main():
+    """Main entry point with proper event loop handling"""
     try:
         asyncio.run(safe_bot_main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("👋 Program terminated by user")
     except Exception as e:
-        logger.error(f"Fatal bot error: {e}")
+        logger.error(f"Main error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

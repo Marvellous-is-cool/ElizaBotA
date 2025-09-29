@@ -107,4 +107,20 @@ export GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL:-"debug"}
 
 # Start gunicorn with the specified config and explicit port binding
 echo "Executing: gunicorn --config gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:application"
-exec gunicorn --config gunicorn_config.py --bind 0.0.0.0:${PORT:-10000} wsgi:application
+#!/bin/bash
+# Enhanced start script with TaskGroup error prevention
+
+echo "🚀 Starting Enhanced 24/7 Bot with TaskGroup Protection"
+
+# Check for required environment variables
+if [ -z "$ROOM_ID" ] || [ -z "$BOT_TOKEN" ]; then
+    echo "❌ Missing required environment variables"
+    echo "   Please set ROOM_ID and BOT_TOKEN"
+    exit 1
+fi
+
+echo "✅ Environment configured for room: $ROOM_ID"
+echo "🛡️ TaskGroup protection enabled"
+
+# Start with resilient Gunicorn configuration
+exec gunicorn --config gunicorn_config.py webserver:app

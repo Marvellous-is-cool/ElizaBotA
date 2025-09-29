@@ -44,6 +44,13 @@ class Bot(BaseBot):
         self.db_client = None
         self.matchmaking = None
         
+        # Connection resilience attributes
+        self.connection_healthy = False
+        self.last_heartbeat = None
+        self.connection_errors = 0
+        self.max_connection_errors = 10
+        self.heartbeat_task = None
+        
         # Match Show registration data
         self.registration_sessions = {}  # Store ongoing registration sessions
         self.event_date = None  # Store the event date
@@ -182,6 +189,46 @@ class Bot(BaseBot):
         
         return "Unknown"
 
+    async def monitor_connection_health(self):
+        """Monitor connection health with periodic heartbeat"""
+        while self.connection_healthy:
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                
+                # Test connection with lightweight operation
+                await self.highrise.get_room_users()
+                self.last_heartbeat = datetime.now()
+                
+                # Reset error counter on successful operation
+                if self.connection_errors > 0:
+                    self.connection_errors = max(0, self.connection_errors - 1)
+                    
+            except Exception as e:
+                self.connection_errors += 1
+                logger.warning(f"Connection health check failed ({self.connection_errors}/{self.max_connection_errors}): {e}")
+                
+                if self.connection_errors >= self.max_connection_errors:
+                    logger.error("Too many connection errors, marking connection as unhealthy")
+                    self.connection_healthy = False
+                    break
+                    
+                # Brief delay before retry
+                await asyncio.sleep(5)
+    
+    async def safe_highrise_operation(self, operation, *args, **kwargs):
+        """Wrapper for Highrise operations with error handling"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return await operation(*args, **kwargs)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Highrise operation failed, retry {attempt + 1}: {e}")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    logger.error(f"Highrise operation failed after {max_retries} attempts: {e}")
+                    raise
+    
     async def set_bot_position(self, user_id):
         """Set the bot position at player's location"""
         try:
@@ -322,40 +369,52 @@ class Bot(BaseBot):
         self.bot_id = session_metadata.user_id
         self.owner_id = session_metadata.room_info.owner_id
         self.bot_status = True
+        self.connection_healthy = True
+        self.last_heartbeat = datetime.now()
         
-        logger.info(f"🎯 Bot connected to room! Bot ID: {self.bot_id}, Owner ID: {self.owner_id}")
+        print(f"🎯 Bot connected to room! Bot ID: {self.bot_id}, Owner ID: {self.owner_id}")
         
         # Initialize services (MongoDB and Matchmaking)
-        logger.info("🔧 Initializing services (MongoDB and Matchmaking)...")
+        print("🔧 Initializing services (MongoDB and Matchmaking)...")
         services_initialized = await self.initialize_services()
         
         if services_initialized:
-            logger.info("✅ Services initialized successfully")
+            print("✅ Services initialized successfully")
         else:
-            logger.warning("⚠️ Services initialization failed - running with limited functionality")
+            print("⚠️ Services initialization failed - running with limited functionality")
         
         # Load bot position
-        logger.info("📍 Loading bot position data...")
+        print("📍 Loading bot position data...")
         await self.load_bot_data()
         
         # Place bot at saved position
-        logger.info("🚶 Placing bot at saved position...")
+        print("🚶 Placing bot at saved position...")
         await self.place_bot()
         
         # Fix registration data structure if needed
         if services_initialized:
-            logger.info("🔧 Fixing registration data structure...")
+            print("🔧 Fixing registration data structure...")
             await self.fix_registration_data()
         
+        # Start connection health monitoring
+        print("💓 Starting connection health monitoring...")
+        self.heartbeat_task = asyncio.create_task(self.monitor_connection_health())
+        
         # Start the match prompt task
-        logger.info("⏰ Starting match prompt task...")
+        print("⏰ Starting match prompt task...")
         await self.start_match_prompt_task()
         
-        # Welcome message
-        logger.info("📢 Sending welcome message to room...")
-        await self.highrise.chat(f"💘 {BOT_NAME} Matchmaking Bot activated! 💘 Find your perfect match here")
+        # Welcome message with error handling
+        print("📢 Sending welcome message to room...")
+        try:
+            await self.safe_highrise_operation(
+                self.highrise.chat, 
+                f"💘 {BOT_NAME} Matchmaking Bot activated! 💘 Find your perfect match here"
+            )
+        except Exception as e:
+            print(f"Failed to send welcome message: {e}")
         
-        logger.info("🎉 Bot startup sequence completed successfully!")
+        print("🎉 Bot startup sequence completed successfully!")
 
     async def start_match_prompt_task(self):
         """Start the periodic match prompt task"""
