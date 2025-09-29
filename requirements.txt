@@ -18,6 +18,7 @@ jinja2
 markupsafe 
 multidict 
 pendulum
+psutil
 python-dateutil 
 python-dotenv 
 pytzdata 

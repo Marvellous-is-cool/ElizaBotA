@@ -33,32 +33,53 @@ def post_fork(server, worker):
     else:
         print(f"⚠️ Secondary worker {worker.nr} - Bot DISABLED to prevent multilogin")
     
-    # Import both managers for comprehensive coverage
-    from webserver import BotManager
-    from connection_resilience import ResilientBotManager
+    # Import managers with error handling
     import threading
     import asyncio
     
-    # Create web-based bot manager for dashboard
-    bot_manager = BotManager(worker_id=worker.nr)
-    manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
-    manager_thread.start()
+    try:
+        from webserver import BotManager
+        bot_manager_available = True
+    except ImportError as e:
+        print(f"⚠️ BotManager import failed: {e}")
+        bot_manager_available = False
     
-    # Create resilient connection manager for TaskGroup protection
-    def run_resilient_bot():
+    try:
+        from connection_resilience import ResilientBotManager
+        resilient_manager_available = True
+    except ImportError as e:
+        print(f"⚠️ ResilientBotManager import failed: {e}")
+        resilient_manager_available = False
+    
+    # Create web-based bot manager for dashboard (if available)
+    if bot_manager_available:
         try:
-            resilient_manager = ResilientBotManager()
-            asyncio.run(resilient_manager.run_with_resilience())
-        except KeyboardInterrupt:
-            print(f"[Worker-{worker.nr}] 👋 Resilient bot shutdown requested")
+            bot_manager = BotManager(worker_id=worker.nr)
+            manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
+            manager_thread.start()
+            print(f"✅ Web manager started for worker {worker.nr}")
         except Exception as e:
-            print(f"[Worker-{worker.nr}] ❌ Resilient bot error: {e}")
-            # Let it restart automatically via cron
+            print(f"⚠️ Web manager failed to start: {e}")
     
-    resilient_thread = threading.Thread(target=run_resilient_bot, daemon=True)
-    resilient_thread.start()
+    # Create resilient connection manager for TaskGroup protection (if available)
+    if resilient_manager_available:
+        def run_resilient_bot():
+            try:
+                resilient_manager = ResilientBotManager()
+                asyncio.run(resilient_manager.run_with_resilience())
+            except KeyboardInterrupt:
+                print(f"[Worker-{worker.nr}] 👋 Resilient bot shutdown requested")
+            except Exception as e:
+                print(f"[Worker-{worker.nr}] ❌ Resilient bot error: {e}")
+                # Let it restart automatically via cron
+        
+        resilient_thread = threading.Thread(target=run_resilient_bot, daemon=True)
+        resilient_thread.start()
+        print(f"✅ Resilient connection manager started for worker {worker.nr}")
     
-    print(f"✅ Worker {worker.nr}: Web manager + Resilient connection manager started")
+    # Fallback: If no managers available, at least log it
+    if not bot_manager_available and not resilient_manager_available:
+        print(f"⚠️ Worker {worker.nr}: No bot managers available - running minimal configuration")
 
 def worker_int(worker):
     """Handle worker interruption"""

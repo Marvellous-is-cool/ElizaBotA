@@ -13,7 +13,12 @@ from pathlib import Path
 # Add current directory to path
 sys.path.append(str(Path(__file__).parent))
 
-from instance_manager import ensure_single_instance, instance_manager
+# Import instance management with fallback
+try:
+    from instance_manager import ensure_single_instance, instance_manager
+except ImportError:
+    from simple_instance_manager import ensure_single_instance, simple_instance_manager as instance_manager
+
 from connection_pool import connection_pool
 from main import main as bot_main
 

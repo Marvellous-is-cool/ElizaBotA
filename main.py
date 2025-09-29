@@ -22,7 +22,13 @@ from db.init_db import initialize_db
 from services.matchmaking import MatchmakingService
 
 # Import instance management and connection pooling
-from instance_manager import ensure_single_instance, instance_manager
+try:
+    # Try full instance manager first (with psutil)
+    from instance_manager import ensure_single_instance, instance_manager
+except ImportError:
+    # Fallback to simple instance manager (no psutil required)
+    from simple_instance_manager import ensure_single_instance, simple_instance_manager as instance_manager
+    
 from connection_pool import connection_pool
 
 # Configure logging (disabled)
