@@ -5,6 +5,7 @@ services:
     runtime: python
     buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: gunicorn --config gunicorn_config.py --bind 0.0.0.0:$PORT wsgi:application
+    # CRITICAL: Single instance prevents multilogin conflicts
     envVars:
       - key: BOT_TOKEN
         sync: false # Set manually in Render dashboard

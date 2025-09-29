@@ -467,6 +467,14 @@ class BotManager:
         self.should_run = True
         self.bot_task = None
         
+        # Multilogin prevention: Only start bot in primary worker (worker_id=0)
+        self.is_primary_worker = (worker_id == 0)
+        if not self.is_primary_worker:
+            self.should_run = False  # Disable bot in secondary workers
+            self.log(f"🚫 Worker {worker_id}: Bot DISABLED to prevent multilogin conflicts")
+        else:
+            self.log(f"🎯 Worker {worker_id}: Primary worker - Bot ENABLED")
+        
     def log(self, message):
         """Log with worker ID"""
         print(f"[Worker-{self.worker_id}] {message}")
@@ -498,9 +506,12 @@ class BotManager:
                 self.log(f"Bot error: {e}")
                 self.bot_running = False
                 
-                # Special handling for TaskGroup errors
-                if "TaskGroup" in str(e) or "ExceptionGroup" in str(e):
+                # Special handling for specific errors
+                error_msg = str(e)
+                if "TaskGroup" in error_msg or "ExceptionGroup" in error_msg:
                     self.log("TaskGroup error detected - likely connection issue")
+                elif "Multilogin closing connection" in error_msg:
+                    self.log("🚫 Multilogin conflict detected - another bot instance running!")
                 
                 # Check restart limits
                 if self.restart_count >= self.max_restarts:

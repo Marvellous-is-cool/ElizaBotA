@@ -8,7 +8,7 @@ from threading import Thread
 # Render sets this automatically, and we need to respect it
 port = int(os.getenv('PORT', '6000'))
 bind = f"0.0.0.0:{port}"
-workers = 4  # Multiple workers for robustness
+workers = 1  # CRITICAL: Single worker prevents multilogin conflicts!
 worker_class = 'sync'
 timeout = 300  # Longer timeout for bot operations
 loglevel = 'info'
@@ -24,9 +24,14 @@ worker_connections = 1000
 max_worker_memory = 200  # MB
 
 def post_fork(server, worker):
-    """Start the resilient bot manager after forking a worker"""
-    # Start bot manager in all workers for redundancy
-    print(f"Initializing worker {worker.nr} with resilient bot manager")
+    """Start the resilient bot manager after forking a worker - MULTILOGIN PREVENTION"""
+    print(f"🔒 Initializing worker {worker.nr} with multilogin prevention")
+    
+    # CRITICAL: Only start bot in the PRIMARY worker to prevent multilogin
+    if worker.nr == 0:
+        print(f"🎯 Primary worker {worker.nr} - Bot will start here")
+    else:
+        print(f"⚠️ Secondary worker {worker.nr} - Bot DISABLED to prevent multilogin")
     
     # Import both managers for comprehensive coverage
     from webserver import BotManager

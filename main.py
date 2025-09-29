@@ -21,6 +21,10 @@ from dotenv import load_dotenv
 from db.init_db import initialize_db
 from services.matchmaking import MatchmakingService
 
+# Import instance management and connection pooling
+from instance_manager import ensure_single_instance, instance_manager
+from connection_pool import connection_pool
+
 # Configure logging (disabled)
 logging.basicConfig(
     level=logging.CRITICAL,  # Only critical errors will be logged
@@ -44,12 +48,17 @@ class Bot(BaseBot):
         self.db_client = None
         self.matchmaking = None
         
-        # Connection resilience attributes
+        # Connection resilience attributes  
         self.connection_healthy = False
         self.last_heartbeat = None
         self.connection_errors = 0
         self.max_connection_errors = 10
         self.heartbeat_task = None
+        
+        # Multilogin prevention attributes
+        self.connection_id = None
+        self.connection_active = False
+        self.unique_bot_id = f"ElizaBot_{os.getpid()}"
         
         # Match Show registration data
         self.registration_sessions = {}  # Store ongoing registration sessions
@@ -372,7 +381,13 @@ class Bot(BaseBot):
         self.connection_healthy = True
         self.last_heartbeat = datetime.now()
         
+        # Register successful connection to prevent multilogin conflicts
+        self.connection_id = str(session_metadata.user_id) 
+        self.connection_active = True
+        await connection_pool.register_connection_success(self.unique_bot_id, self.connection_id)
+        
         print(f"🎯 Bot connected to room! Bot ID: {self.bot_id}, Owner ID: {self.owner_id}")
+        print(f"🔐 Connection registered: {self.connection_id} for {self.unique_bot_id}")
         
         # Initialize services (MongoDB and Matchmaking)
         print("🔧 Initializing services (MongoDB and Matchmaking)...")
@@ -571,7 +586,26 @@ class Bot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         """Say goodbye when users leave"""
-        await self.highrise.chat(f"Goodbye {user.username}! � Hope you find your perfect match next time! 💖")
+        await self.highrise.chat(f"Goodbye {user.username}! 👋 Hope you find your perfect match next time! 💖")
+    
+    async def on_disconnect(self) -> None:
+        """Handle bot disconnection - cleanup connections to prevent multilogin"""
+        print(f"🔌 Bot disconnected! Cleaning up connection {self.connection_id}")
+        self.connection_active = False
+        self.connection_healthy = False
+        
+        # Clean up connection pool
+        if hasattr(self, 'unique_bot_id') and self.unique_bot_id:
+            await connection_pool.cleanup_connection(self.unique_bot_id)
+        
+        # Cancel health monitoring task
+        if self.heartbeat_task and not self.heartbeat_task.done():
+            self.heartbeat_task.cancel()
+        
+        # Release instance lock
+        instance_manager.release_lock()
+        
+        print("🧹 Disconnect cleanup completed")
 
     async def on_whisper(self, user: User, message: str) -> None:
         """Handle whisper messages from users"""
@@ -2326,7 +2360,14 @@ class Bot(BaseBot):
             await self.highrise.chat("Sorry, something went wrong! Please try again. 🤖")
 
 async def main():
-    """Main function with TaskGroup error handling"""
+    """Main function with multilogin prevention and TaskGroup error handling"""
+    # Ensure only one instance is running
+    print("🔒 Ensuring single bot instance...")
+    try:
+        ensure_single_instance()
+    except SystemExit:
+        return False
+    
     # Get credentials from environment variables
     room_id = os.getenv("ROOM_ID")
     bot_token = os.getenv("BOT_TOKEN")
@@ -2350,35 +2391,62 @@ async def main():
     
     print(f"🎯 Starting bot for room: {room_id}")
     
-    # Multiple retry attempts for TaskGroup errors
+    # Check connection pool before attempting connection
+    unique_bot_id = f"ElizaBot_{os.getpid()}"
+    if not await connection_pool.can_connect(unique_bot_id):
+        print("⚠️ Connection blocked by pool manager (cooldown active)")
+        return False
+    
+    # Multiple retry attempts for TaskGroup errors with connection pool management
     max_attempts = 3
     for attempt in range(max_attempts):
         try:
             print(f"🔄 Connection attempt {attempt + 1}/{max_attempts}")
             
-            # Create fresh bot instance for each attempt
-            bot_instance = Bot()
-            definitions = [BotDefinition(bot_instance, room_id, bot_token)]
+            # Register connection attempt with pool
+            await connection_pool.register_connection_attempt(unique_bot_id)
             
-            # Try to connect
-            await __main__.main(definitions)
-            print("✅ Bot connected successfully!")
-            return True
+            # Use connection pool context manager
+            async with connection_pool.managed_connection(unique_bot_id):
+                # Create fresh bot instance for each attempt
+                bot_instance = Bot()
+                definitions = [BotDefinition(bot_instance, room_id, bot_token)]
+                
+                # Try to connect
+                await __main__.main(definitions)
+                print("✅ Bot connected successfully!")
+                return True
             
         except Exception as e:
             error_msg = str(e)
             print(f"❌ Attempt {attempt + 1} failed: {error_msg}")
             
+            # Register connection failure
+            await connection_pool.register_connection_failure(unique_bot_id, error_msg)
+            
             # Handle different error types
             if "TaskGroup" in error_msg or "ExceptionGroup" in error_msg:
                 print("💡 TaskGroup error - this is a known connection issue")
+                print("🔧 Implementing multilogin prevention measures...")
                 if attempt < max_attempts - 1:
-                    delay = 10 * (attempt + 1)  # 10s, 20s, 30s delays
+                    delay = 30 * (attempt + 1)  # Longer delays: 30s, 60s, 90s
                     print(f"⏳ Retrying in {delay} seconds...")
                     await asyncio.sleep(delay)
                     continue
                 else:
                     print("❌ Max attempts reached for TaskGroup error")
+                    
+            elif "Multilogin closing connection" in error_msg:
+                print("🚫 Multilogin detected - another bot instance may be running")
+                print("🔪 Killing any existing instances...")
+                instance_manager.kill_existing_instances()
+                if attempt < max_attempts - 1:
+                    delay = 60  # Wait longer for multilogin conflicts  
+                    print(f"⏳ Waiting {delay}s for connection cleanup...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    print("❌ Multilogin conflict could not be resolved")
                     
             elif "Invalid room id" in error_msg:
                 print("💡 Room ID issue - check your ROOM_ID")
@@ -2392,8 +2460,23 @@ async def main():
             break
     
     print("❌ Bot connection failed after all attempts")
+    
+    # Cleanup on failure
+    print("🧹 Performing cleanup...")
+    await connection_pool.force_cleanup_all()
+    instance_manager.release_lock()
+    
     return False
 
 
 if __name__ == "__main__":
-    arun(main())
+    try:
+        arun(main())
+    except KeyboardInterrupt:
+        print("\n🛑 Bot stopped by user")
+    except Exception as e:
+        print(f"🚨 Fatal error: {e}")
+    finally:
+        # Final cleanup
+        print("🧹 Final cleanup...")
+        instance_manager.release_lock()
