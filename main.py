@@ -16,6 +16,9 @@ from functions.emote_system import (
     emote, fight, hug, flirt, emotes, allemo, emo, single_emote,
     loop, stoploop, numbers, number_emote, stop
 )
+from functions.tipping_system import (
+    tip_user, tip_all_users, tip_participants, check_wallet, tip_help
+)
 from config import MATCH_PROMPT_INTERVAL, BOT_NAME, MATCH_PROMPTS
 from dotenv import load_dotenv
 from db.init_db import initialize_db
@@ -618,7 +621,26 @@ class Bot(BaseBot):
         logger.info(f"👥 Whisper received: '{message}' from @{user.username} (ID: {user.id})")
         
         try:
-            response = await self.command_handler(user.id, message)
+            lower_msg = message.lower().strip()
+            response = None
+            
+            # Handle tipping commands (owner only, whisper only)
+            if user.id == self.owner_id:
+                if lower_msg.startswith('tip @'):
+                    response = await tip_user(self, user, message)
+                elif lower_msg.startswith('tipall '):
+                    response = await tip_all_users(self, user, message)
+                elif lower_msg.startswith('tipparticipants '):
+                    response = await tip_participants(self, user, message)
+                elif lower_msg == 'wallet':
+                    response = await check_wallet(self, user)
+                elif lower_msg in ['tiphelp', 'tip help', 'tips']:
+                    response = await tip_help(self, user)
+            
+            # If no tipping command, try regular command handler
+            if not response:
+                response = await self.command_handler(user.id, message)
+            
             if response:
                 try:
                     await self.highrise.send_whisper(user.id, response)
@@ -2342,6 +2364,12 @@ class Bot(BaseBot):
                         "• !set event <date> - Set event date\n"
                         "• !addhost <username> - Add a host\n"
                         "• !removehost <username> - Remove a host\n\n"
+                        "💰 **Tipping Commands** (Whisper Only)\n"
+                        "• Whisper 'tiphelp' for full tipping guide\n"
+                        "• tip @username amount - Tip specific user\n"
+                        "• tipall amount - Tip everyone in room\n"
+                        "• tipparticipants amount - Tip all registered\n"
+                        "• wallet - Check bot balance\n\n"
                     )
                 
                 # Add event info if available
