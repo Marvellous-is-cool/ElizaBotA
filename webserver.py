@@ -455,23 +455,26 @@ def keep_alive():
     t.start()
 
 class BotManager:
-    """Robust bot manager with automatic restart capabilities"""
+    """Robust bot manager with automatic restart capabilities - DISABLED BY DEFAULT to prevent multilogin"""
     
-    def __init__(self, worker_id=0):
+    def __init__(self, worker_id=0, auto_start=False):
         self.worker_id = worker_id
         self.bot_running = False
         self.bot_start_time = None
         self.restart_count = 0
         self.max_restarts = 20  # Increased for TaskGroup errors
         self.restart_delay = 30  # seconds
-        self.should_run = True
+        self.should_run = auto_start  # CRITICAL: Disabled by default!
         self.bot_task = None
         
-        # Multilogin prevention: Only start bot in primary worker (worker_id=0)
+        # Multilogin prevention: Only start bot in primary worker (worker_id=0) AND if auto_start=True
         self.is_primary_worker = (worker_id == 0)
         if not self.is_primary_worker:
             self.should_run = False  # Disable bot in secondary workers
-            self.log(f"🚫 Worker {worker_id}: Bot DISABLED to prevent multilogin conflicts")
+            self.log(f"🚫 Worker {worker_id}: Bot DISABLED (secondary worker)")
+        elif not auto_start:
+            self.should_run = False
+            self.log(f"🚫 Worker {worker_id}: Bot DISABLED (auto_start=False - preventing multilogin)")
         else:
             self.log(f"🎯 Worker {worker_id}: Primary worker - Bot ENABLED")
         

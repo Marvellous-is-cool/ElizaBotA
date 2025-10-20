@@ -24,7 +24,7 @@ worker_connections = 1000
 max_worker_memory = 200  # MB
 
 def post_fork(server, worker):
-    """Start the resilient bot manager after forking a worker - MULTILOGIN PREVENTION"""
+    """Start ONLY ONE bot manager after forking a worker - CRITICAL FOR MULTILOGIN PREVENTION"""
     print(f"🔒 Initializing worker {worker.nr} with multilogin prevention")
     
     # CRITICAL: Only start bot in the PRIMARY worker to prevent multilogin
@@ -38,54 +38,33 @@ def post_fork(server, worker):
     import threading
     import asyncio
     
-    # Try to import connection resilience first (preferred method)
+    # CRITICAL: Only use connection_resilience, NOT both managers!
+    # Using both BotManager AND ResilientBotManager causes multilogin!
     try:
         from connection_resilience import ResilientBotManager
         resilient_manager_available = True
-        print("✅ ResilientBotManager available - using resilient connection")
+        print("✅ Using ResilientBotManager (SINGLE INSTANCE)")
     except ImportError as e:
-        print(f"⚠️ ResilientBotManager import failed: {e}")
+        print(f"❌ ResilientBotManager import failed: {e}")
         resilient_manager_available = False
     
-    # Fallback to web-based manager if resilient not available
-    if not resilient_manager_available:
-        try:
-            from webserver import BotManager
-            bot_manager_available = True
-            print("✅ BotManager available - using web manager as fallback")
-        except ImportError as e:
-            print(f"⚠️ BotManager import failed: {e}")
-            bot_manager_available = False
-    else:
-        bot_manager_available = False  # Don't use both!
-    
-    # Start ONLY ONE manager to prevent multilogin
+    # Start ONLY the resilient manager
     if resilient_manager_available:
-        # Preferred: Use resilient connection manager
         def run_resilient_bot():
             try:
+                print("🚀 Starting SINGLE bot instance via ResilientBotManager")
                 resilient_manager = ResilientBotManager()
                 asyncio.run(resilient_manager.run_with_resilience())
             except KeyboardInterrupt:
-                print(f"[Worker-{worker.nr}] 👋 Resilient bot shutdown requested")
+                print(f"[Worker-{worker.nr}] 👋 Bot shutdown requested")
             except Exception as e:
-                print(f"[Worker-{worker.nr}] ❌ Resilient bot error: {e}")
+                print(f"[Worker-{worker.nr}] ❌ Bot error: {e}")
         
         resilient_thread = threading.Thread(target=run_resilient_bot, daemon=True)
         resilient_thread.start()
-        print(f"✅ PRIMARY WORKER {worker.nr}: Resilient bot manager started (SINGLE INSTANCE)")
-        
-    elif bot_manager_available:
-        # Fallback: Use web-based manager
-        try:
-            bot_manager = BotManager(worker_id=worker.nr)
-            manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
-            manager_thread.start()
-            print(f"✅ PRIMARY WORKER {worker.nr}: Web bot manager started (SINGLE INSTANCE)")
-        except Exception as e:
-            print(f"⚠️ Web manager failed to start: {e}")
+        print(f"✅ PRIMARY WORKER {worker.nr}: SINGLE bot instance started")
     else:
-        print(f"❌ Worker {worker.nr}: No bot managers available!")
+        print(f"❌ Worker {worker.nr}: No bot manager available!")
 
 def worker_int(worker):
     """Handle worker interruption"""
