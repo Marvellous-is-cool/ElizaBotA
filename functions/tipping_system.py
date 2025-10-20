@@ -72,7 +72,18 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
         return f"✅ Tipped @{target_user.username} {amount}g"
         
     except Exception as e:
-        return f"❌ Tip failed"
+        # Log the actual error for debugging
+        print(f"❌ tip_user error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        # Return a short error with hint
+        error_msg = str(e)
+        if "gold_bar" in error_msg.lower():
+            return "❌ Invalid gold type"
+        elif "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
+            return "❌ Not enough gold"
+        else:
+            return f"❌ Error: {str(e)[:50]}"
 
 
 async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]:
@@ -136,7 +147,8 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
             try:
                 await bot.highrise.tip_user(room_user.id, "gold_bar_1", amount_per_user)
                 success_count += 1
-            except Exception:
+            except Exception as e:
+                print(f"Failed to tip {room_user.username}: {e}")
                 failed_count += 1
         
         # Ultra-short response to avoid "message too long" error
@@ -146,7 +158,11 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
             return f"✅ Tipped {success_count} users {amount_per_user}g"
         
     except Exception as e:
-        return f"❌ Tip failed"
+        # Log the actual error for debugging
+        print(f"❌ tip_all_users error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return f"❌ Error: {str(e)[:50]}"
 
 
 async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[str]:
@@ -222,7 +238,8 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
             try:
                 await bot.highrise.tip_user(participant['user_id'], "gold_bar_1", amount_per_user)
                 success_count += 1
-            except Exception:
+            except Exception as e:
+                print(f"Failed to tip participant {participant.get('username', 'unknown')}: {e}")
                 failed_count += 1
         
         # Ultra-short response
@@ -232,7 +249,11 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
             return f"✅ Tipped {success_count} participants {amount_per_user}g"
         
     except Exception as e:
-        return f"❌ Tip failed"
+        # Log the actual error for debugging
+        print(f"❌ tip_participants error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return f"❌ Error: {str(e)[:50]}"
 
 
 async def check_wallet(bot: BaseBot, user: User) -> Optional[str]:
