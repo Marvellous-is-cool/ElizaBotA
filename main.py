@@ -2408,6 +2408,11 @@ async def main():
     except SystemExit:
         return False
     
+    # CRITICAL: Wait for any previous deployments to fully shut down
+    print("⏳ Waiting 5 seconds for any stale connections to close...")
+    await asyncio.sleep(5)
+    print("✅ Cleanup wait complete - proceeding with fresh connection")
+    
     # Get credentials from environment variables
     room_id = os.getenv("ROOM_ID")
     bot_token = os.getenv("BOT_TOKEN")

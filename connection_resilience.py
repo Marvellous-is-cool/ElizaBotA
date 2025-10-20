@@ -99,6 +99,11 @@ class ResilientBotManager:
         self.running = True
         logger.info("🚀 Starting Resilient Bot Manager")
         
+        # CRITICAL: Force cleanup any stale connections from previous deployments
+        logger.info("🧹 Cleaning up any stale connections from previous deployments...")
+        await asyncio.sleep(5)  # Wait 5 seconds for old deployments to fully shut down
+        logger.info("✅ Cleanup wait complete - starting fresh connection")
+        
         try:
             # Get credentials once
             self.room_id, self.bot_token = self.get_credentials()
