@@ -622,42 +622,49 @@ class Bot(BaseBot):
         
         try:
             lower_msg = message.lower().strip()
-            response = None
             
-            # Handle tipping commands (owner only, whisper only)
+            # Handle tipping commands (owner only, whisper only) - SEND IMMEDIATELY
             if user.id == self.owner_id:
                 if lower_msg.startswith('!tip @'):
                     response = await tip_user(self, user, message)
+                    if response:
+                        await self.highrise.send_whisper(user.id, response)
+                    return
                 elif lower_msg.startswith('!tipall '):
                     response = await tip_all_users(self, user, message)
+                    if response:
+                        await self.highrise.send_whisper(user.id, response)
+                    return
                 elif lower_msg.startswith('!tipparticipants '):
                     response = await tip_participants(self, user, message)
+                    if response:
+                        await self.highrise.send_whisper(user.id, response)
+                    return
                 elif lower_msg == '!wallet':
                     response = await check_wallet(self, user)
+                    if response:
+                        await self.highrise.send_whisper(user.id, response)
+                    return
                 elif lower_msg in ['tiphelp', 'tip help', 'tips']:
                     response = await tip_help(self, user)
+                    if response:
+                        await self.highrise.send_whisper(user.id, response)
+                    return
             
-            # If no tipping command, try regular command handler
-            if not response:
-                response = await self.command_handler(user.id, message)
-            
+            # Try regular command handler for all other whispers
+            response = await self.command_handler(user.id, message)
             if response:
-                try:
-                    # DEBUG: Log message length and content for Render logs
-                    logger.info(f"📨 DEBUG: Whisper response length: {len(response)} chars")
-                    logger.info(f"📨 DEBUG: Whisper content preview: {response[:200]}...")  # First 200 chars
-                    
-                    await self.highrise.send_whisper(user.id, response)
-                    logger.info(f"✅ Whisper response sent to @{user.username}")
-                except Exception as e:
-                    logger.error(f"❌ DEBUG: Whisper FAILED - Error: {e}")
-                    logger.error(f"❌ DEBUG: Full message that failed ({len(response)} chars): {response}")
-                    await self.highrise.chat(f"Whisper Error: {e}")
-                    logger.error(f"❌ Failed to send whisper to @{user.username}: {e}")
-            else:
-                logger.info(f"ℹ️ No response generated for whisper from @{user.username}")
+                logger.info(f"📨 Sending whisper response ({len(response)} chars) to @{user.username}")
+                await self.highrise.send_whisper(user.id, response)
+                logger.info(f"✅ Whisper sent successfully to @{user.username}")
+                
         except Exception as e:
-            logger.error(f"❌ Error processing whisper from @{user.username}: {e}")
+            logger.error(f"❌ Error in on_whisper for @{user.username}: {e}")
+            try:
+                await self.highrise.chat(f"Whisper Error: {e}")
+            except:
+                pass
+    
     
     async def on_message(self, user_id: str, conversation_id: str, is_new_conversation: bool) -> None:
         """Handle direct messages to the bot via conversations"""
@@ -2517,14 +2524,14 @@ async def main():
     return False
 
 
-if __name__ == "__main__":
-    try:
-        arun(main())
-    except KeyboardInterrupt:
-        print("\n🛑 Bot stopped by user")
-    except Exception as e:
-        print(f"🚨 Fatal error: {e}")
-    finally:
-        # Final cleanup
-        print("🧹 Final cleanup...")
-        instance_manager.release_lock()
+# if __name__ == "__main__":
+#     try:
+#         arun(main())
+#     except KeyboardInterrupt:
+#         print("\n🛑 Bot stopped by user")
+#     except Exception as e:
+#         print(f"🚨 Fatal error: {e}")
+#     finally:
+#         # Final cleanup
+#         print("🧹 Final cleanup...")
+#         instance_manager.release_lock()
