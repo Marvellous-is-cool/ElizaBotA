@@ -58,6 +58,14 @@ class ResilientBotManager:
             # Create fresh bot instance
             self.bot_instance = Bot()
             
+            # Store bot instance globally for debug endpoints
+            try:
+                import webserver
+                webserver.bot_instance = self.bot_instance
+                logger.info("✅ Bot instance stored for debug endpoints")
+            except Exception as e:
+                logger.warning(f"Could not store bot instance globally: {e}")
+            
             # Create bot definition
             definitions = [BotDefinition(self.bot_instance, self.room_id, self.bot_token)]
             

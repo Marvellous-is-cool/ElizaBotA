@@ -20,6 +20,7 @@ app = Flask(__name__)
 bot_running = False
 bot_start_time = None
 bot_thread = None
+bot_instance = None  # Store reference to bot for debug commands
 
 # Global log storage (thread-safe deque with max size)
 bot_logs = deque(maxlen=1000)  # Keep last 1000 log entries
@@ -201,6 +202,151 @@ def live_logs():
             "status": "error",
             "error": str(e),
             "recent_logs": []
+        }), 500
+
+@app.route('/debug/wallet')
+def debug_wallet():
+    """Debug endpoint to test wallet command and see response"""
+    try:
+        if not bot_instance:
+            return jsonify({
+                "status": "error",
+                "error": "Bot not running or not available"
+            }), 503
+        
+        # Import tipping system
+        from functions.tipping_system import check_wallet
+        
+        # Create a mock user object with owner ID
+        class MockUser:
+            def __init__(self):
+                self.id = bot_instance.owner_id
+                self.username = "DebugUser"
+        
+        # Run the wallet check in the bot's event loop
+        async def run_wallet_check():
+            try:
+                user = MockUser()
+                response = await check_wallet(bot_instance, user)
+                return {
+                    "status": "success",
+                    "response": response,
+                    "response_length": len(response) if response else 0,
+                    "timestamp": datetime.now().isoformat()
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+        
+        # Get the bot's event loop and run the command
+        if hasattr(bot_instance, '_task_group') and bot_instance._task_group:
+            # Try to schedule in bot's existing event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(run_wallet_check())
+            loop.close()
+        else:
+            result = {"status": "error", "error": "Bot event loop not available"}
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }), 500
+
+@app.route('/debug/tip-test')
+def debug_tip_test():
+    """Debug endpoint to test a tip command with a specific user"""
+    try:
+        if not bot_instance:
+            return jsonify({
+                "status": "error",
+                "error": "Bot not running or not available"
+            }), 503
+        
+        # Get parameters
+        user_id = request.args.get('user_id')
+        amount = request.args.get('amount', '10')
+        
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Missing user_id parameter. Usage: /debug/tip-test?user_id=USER_ID&amount=10"
+            }), 400
+        
+        # Import tipping system
+        from functions.tipping_system import tip_user
+        
+        # Create a mock user object with owner ID
+        class MockUser:
+            def __init__(self):
+                self.id = bot_instance.owner_id
+                self.username = "DebugUser"
+        
+        # Run the tip command in the bot's event loop
+        async def run_tip_test():
+            try:
+                user = MockUser()
+                message = f"!tip @testuser {amount}"
+                # Manually construct the message that would be sent
+                response = f"Testing tip to {user_id} with {amount} gold"
+                return {
+                    "status": "success",
+                    "test_response": response,
+                    "response_length": len(response),
+                    "timestamp": datetime.now().isoformat(),
+                    "note": "This is a test - no actual tip was sent"
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(run_tip_test())
+        loop.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }), 500
+
+@app.route('/debug/logs-realtime')
+def debug_logs_realtime():
+    """Get real-time logs with whisper debug info"""
+    try:
+        # Get last 50 logs
+        recent_logs = list(bot_logs)[-50:]
+        
+        # Filter for whisper-related logs
+        whisper_logs = [log for log in recent_logs if 'whisper' in log['message'].lower() or 'debug' in log['message'].lower()]
+        
+        return jsonify({
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "total_logs": len(bot_logs),
+            "recent_logs": recent_logs,
+            "whisper_debug_logs": whisper_logs,
+            "bot_running": bot_running
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
         }), 500
 
 @app.route('/dashboard')
