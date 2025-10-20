@@ -69,13 +69,16 @@ class ResilientBotManager:
             # Create bot definition
             definitions = [BotDefinition(self.bot_instance, self.room_id, self.bot_token)]
             
-            # Start bot with timeout protection
+            # Start bot - this should block indefinitely until disconnect
+            logger.info("🔌 Connecting to Highrise...")
             bot_task = asyncio.create_task(__main__.main(definitions))
             
-            # Monitor for completion or errors
+            # Wait for bot to connect and run
             await bot_task
             
-            return True
+            # If we reach here, bot disconnected (might be multilogin or server disconnect)
+            logger.warning("⚠️ Bot disconnected - connection ended unexpectedly")
+            return False  # Force reconnection attempt
             
         except asyncio.CancelledError:
             logger.info("Bot session cancelled")
@@ -122,13 +125,17 @@ class ResilientBotManager:
                     logger.info(f"🔗 Connection attempt {self.reconnect_attempts + 1}/{self.max_reconnect_attempts}")
                     
                     # Attempt to create and run bot session
+                    # This blocks until the bot disconnects
                     success = await self.create_bot_session()
                     
-                    if success:
-                        logger.info("✅ Bot session completed successfully")
-                        self.reconnect_attempts = 0  # Reset on success
+                    # If we reach here, the bot disconnected (not an error, but needs reconnect)
+                    if not success:
+                        logger.warning("🔄 Bot disconnected - preparing to reconnect...")
+                        await asyncio.sleep(10)  # Wait before reconnecting
                     else:
-                        raise Exception("Bot session failed")
+                        # Should not reach here, but handle it anyway
+                        logger.info("✅ Bot session completed normally")
+                        self.reconnect_attempts = 0  # Reset on success
                         
                 except KeyboardInterrupt:
                     logger.info("👋 Shutdown requested by user")
