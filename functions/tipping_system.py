@@ -49,17 +49,27 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
             return f"❌ User @{target_username} not found in the room."
         
         # Check bot's wallet balance
-        wallet = (await bot.highrise.get_wallet()).content
-        bot_balance = wallet.amount
+        wallet_response = await bot.highrise.get_wallet()
+        wallet = wallet_response.content
+        
+        # Wallet is a list of CurrencyItem objects
+        bot_balance = 0
+        if isinstance(wallet, list):
+            for item in wallet:
+                if hasattr(item, 'amount'):
+                    bot_balance += item.amount
+        else:
+            # Fallback if wallet is a single object
+            bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < amount:
             return f"❌ Insufficient balance. Bot has {bot_balance}g, need {amount}g."
         
         # Send the tip
-        await bot.highrise.tip_user(target_user.id, f"gold_bar_{amount}")
+        await bot.highrise.tip_user(target_user.id, "gold_bar_1", amount)
         
         # Send confirmation to owner (whisper)
-        return f"✅ Successfully tipped @{target_user.username} {amount}g!\n💰 Remaining balance: {bot_balance - amount}g"
+        return f"✅ Tipped @{target_user.username} {amount}g!\n💰 Remaining: {bot_balance - amount}g"
         
     except Exception as e:
         return f"❌ Failed to tip user: {str(e)}"
@@ -103,31 +113,39 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
         total_amount = amount_per_user * len(users_to_tip)
         
         # Check bot's wallet balance
-        wallet = (await bot.highrise.get_wallet()).content
-        bot_balance = wallet.amount
+        wallet_response = await bot.highrise.get_wallet()
+        wallet = wallet_response.content
+        
+        # Wallet is a list of CurrencyItem objects
+        bot_balance = 0
+        if isinstance(wallet, list):
+            for item in wallet:
+                if hasattr(item, 'amount'):
+                    bot_balance += item.amount
+        else:
+            bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < total_amount:
-            max_users = bot_balance // amount_per_user
-            return f"❌ Insufficient balance.\n💰 Bot has {bot_balance}g\n📊 Need {total_amount}g for {len(users_to_tip)} users\n💡 Can tip {max_users} users with current balance"
+            max_users = bot_balance // amount_per_user if amount_per_user > 0 else 0
+            return f"❌ Insufficient balance.\n💰 Bot: {bot_balance}g\n📊 Need: {total_amount}g\n💡 Can tip {max_users} users"
         
-        # Tip all users
+        # Tip all users (limit response to avoid "message too long")
         success_count = 0
-        failed_users = []
+        failed_count = 0
         
         for room_user in users_to_tip:
             try:
-                await bot.highrise.tip_user(room_user.id, f"gold_bar_{amount_per_user}")
+                await bot.highrise.tip_user(room_user.id, "gold_bar_1", amount_per_user)
                 success_count += 1
-            except Exception as e:
-                failed_users.append(f"@{room_user.username}")
+            except Exception:
+                failed_count += 1
         
-        # Build response
-        response = f"✅ Tipped {success_count}/{len(users_to_tip)} users {amount_per_user}g each\n"
-        response += f"💰 Total spent: {success_count * amount_per_user}g\n"
-        response += f"💰 Remaining balance: {bot_balance - (success_count * amount_per_user)}g"
+        # Build short response to avoid "message too long" error
+        response = f"✅ Tipped {success_count} users {amount_per_user}g each\n"
+        response += f"💰 Spent: {success_count * amount_per_user}g"
         
-        if failed_users:
-            response += f"\n⚠️ Failed to tip: {', '.join(failed_users)}"
+        if failed_count > 0:
+            response += f"\n⚠️ {failed_count} failed"
         
         return response
         
@@ -185,31 +203,39 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
         total_amount = amount_per_user * len(participants_in_room)
         
         # Check bot's wallet balance
-        wallet = (await bot.highrise.get_wallet()).content
-        bot_balance = wallet.amount
+        wallet_response = await bot.highrise.get_wallet()
+        wallet = wallet_response.content
+        
+        # Wallet is a list of CurrencyItem objects
+        bot_balance = 0
+        if isinstance(wallet, list):
+            for item in wallet:
+                if hasattr(item, 'amount'):
+                    bot_balance += item.amount
+        else:
+            bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < total_amount:
-            max_users = bot_balance // amount_per_user
-            return f"❌ Insufficient balance.\n💰 Bot has {bot_balance}g\n📊 Need {total_amount}g for {len(participants_in_room)} participants\n💡 Can tip {max_users} participants with current balance"
+            max_users = bot_balance // amount_per_user if amount_per_user > 0 else 0
+            return f"❌ Insufficient balance.\n💰 Bot: {bot_balance}g\n📊 Need: {total_amount}g"
         
-        # Tip all participants
+        # Tip all participants (avoid long messages)
         success_count = 0
-        failed_users = []
+        failed_count = 0
         
         for participant in participants_in_room:
             try:
-                await bot.highrise.tip_user(participant['user_id'], f"gold_bar_{amount_per_user}")
+                await bot.highrise.tip_user(participant['user_id'], "gold_bar_1", amount_per_user)
                 success_count += 1
-            except Exception as e:
-                failed_users.append(f"@{participant['username']}")
+            except Exception:
+                failed_count += 1
         
-        # Build response
-        response = f"✅ Tipped {success_count}/{len(participants_in_room)} participants {amount_per_user}g each\n"
-        response += f"💰 Total spent: {success_count * amount_per_user}g\n"
-        response += f"💰 Remaining balance: {bot_balance - (success_count * amount_per_user)}g"
+        # Build short response
+        response = f"✅ Tipped {success_count} participants {amount_per_user}g each\n"
+        response += f"💰 Spent: {success_count * amount_per_user}g"
         
-        if failed_users:
-            response += f"\n⚠️ Failed to tip: {', '.join(failed_users)}"
+        if failed_count > 0:
+            response += f"\n⚠️ {failed_count} failed"
         
         return response
         
@@ -227,8 +253,19 @@ async def check_wallet(bot: BaseBot, user: User) -> Optional[str]:
         return "❌ Only the owner and VIPs can check the wallet."
     
     try:
-        wallet = (await bot.highrise.get_wallet()).content
-        return f"💰 Bot Wallet Balance: {wallet.amount}g"
+        wallet_response = await bot.highrise.get_wallet()
+        wallet = wallet_response.content
+        
+        # Wallet is a list of CurrencyItem objects
+        bot_balance = 0
+        if isinstance(wallet, list):
+            for item in wallet:
+                if hasattr(item, 'amount'):
+                    bot_balance += item.amount
+        else:
+            bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
+        
+        return f"💰 Bot Wallet Balance: {bot_balance}g"
         
     except Exception as e:
         return f"❌ Failed to check wallet: {str(e)}"

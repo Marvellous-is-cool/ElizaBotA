@@ -28,41 +28,40 @@ def post_fork(server, worker):
     print(f"🔒 Initializing worker {worker.nr} with multilogin prevention")
     
     # CRITICAL: Only start bot in the PRIMARY worker to prevent multilogin
-    if worker.nr == 0:
-        print(f"🎯 Primary worker {worker.nr} - Bot will start here")
-    else:
+    if worker.nr != 0:
         print(f"⚠️ Secondary worker {worker.nr} - Bot DISABLED to prevent multilogin")
+        return  # Exit early for non-primary workers
+    
+    print(f"🎯 Primary worker {worker.nr} - Starting bot here ONLY")
     
     # Import managers with error handling
     import threading
     import asyncio
     
-    try:
-        from webserver import BotManager
-        bot_manager_available = True
-    except ImportError as e:
-        print(f"⚠️ BotManager import failed: {e}")
-        bot_manager_available = False
-    
+    # Try to import connection resilience first (preferred method)
     try:
         from connection_resilience import ResilientBotManager
         resilient_manager_available = True
+        print("✅ ResilientBotManager available - using resilient connection")
     except ImportError as e:
         print(f"⚠️ ResilientBotManager import failed: {e}")
         resilient_manager_available = False
     
-    # Create web-based bot manager for dashboard (if available)
-    if bot_manager_available:
+    # Fallback to web-based manager if resilient not available
+    if not resilient_manager_available:
         try:
-            bot_manager = BotManager(worker_id=worker.nr)
-            manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
-            manager_thread.start()
-            print(f"✅ Web manager started for worker {worker.nr}")
-        except Exception as e:
-            print(f"⚠️ Web manager failed to start: {e}")
+            from webserver import BotManager
+            bot_manager_available = True
+            print("✅ BotManager available - using web manager as fallback")
+        except ImportError as e:
+            print(f"⚠️ BotManager import failed: {e}")
+            bot_manager_available = False
+    else:
+        bot_manager_available = False  # Don't use both!
     
-    # Create resilient connection manager for TaskGroup protection (if available)
+    # Start ONLY ONE manager to prevent multilogin
     if resilient_manager_available:
+        # Preferred: Use resilient connection manager
         def run_resilient_bot():
             try:
                 resilient_manager = ResilientBotManager()
@@ -71,15 +70,22 @@ def post_fork(server, worker):
                 print(f"[Worker-{worker.nr}] 👋 Resilient bot shutdown requested")
             except Exception as e:
                 print(f"[Worker-{worker.nr}] ❌ Resilient bot error: {e}")
-                # Let it restart automatically via cron
         
         resilient_thread = threading.Thread(target=run_resilient_bot, daemon=True)
         resilient_thread.start()
-        print(f"✅ Resilient connection manager started for worker {worker.nr}")
-    
-    # Fallback: If no managers available, at least log it
-    if not bot_manager_available and not resilient_manager_available:
-        print(f"⚠️ Worker {worker.nr}: No bot managers available - running minimal configuration")
+        print(f"✅ PRIMARY WORKER {worker.nr}: Resilient bot manager started (SINGLE INSTANCE)")
+        
+    elif bot_manager_available:
+        # Fallback: Use web-based manager
+        try:
+            bot_manager = BotManager(worker_id=worker.nr)
+            manager_thread = threading.Thread(target=bot_manager.start, daemon=True)
+            manager_thread.start()
+            print(f"✅ PRIMARY WORKER {worker.nr}: Web bot manager started (SINGLE INSTANCE)")
+        except Exception as e:
+            print(f"⚠️ Web manager failed to start: {e}")
+    else:
+        print(f"❌ Worker {worker.nr}: No bot managers available!")
 
 def worker_int(worker):
     """Handle worker interruption"""

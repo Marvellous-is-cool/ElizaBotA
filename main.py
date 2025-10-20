@@ -626,13 +626,13 @@ class Bot(BaseBot):
             
             # Handle tipping commands (owner only, whisper only)
             if user.id == self.owner_id:
-                if lower_msg.startswith('tip @'):
+                if lower_msg.startswith('!tip @'):
                     response = await tip_user(self, user, message)
-                elif lower_msg.startswith('tipall '):
+                elif lower_msg.startswith('!tipall '):
                     response = await tip_all_users(self, user, message)
-                elif lower_msg.startswith('tipparticipants '):
+                elif lower_msg.startswith('!tipparticipants '):
                     response = await tip_participants(self, user, message)
-                elif lower_msg == 'wallet':
+                elif lower_msg == '!wallet':
                     response = await check_wallet(self, user)
                 elif lower_msg in ['tiphelp', 'tip help', 'tips']:
                     response = await tip_help(self, user)
@@ -2425,31 +2425,31 @@ async def main():
     
     print(f"🎯 Starting bot for room: {room_id}")
     
-    # Check connection pool before attempting connection
-    unique_bot_id = f"ElizaBot_{os.getpid()}"
-    if not await connection_pool.can_connect(unique_bot_id):
-        print("⚠️ Connection blocked by pool manager (cooldown active)")
-        return False
-    
     # Multiple retry attempts for TaskGroup errors with connection pool management
     max_attempts = 3
+    unique_bot_id = f"ElizaBot_{os.getpid()}"
+    
     for attempt in range(max_attempts):
         try:
             print(f"🔄 Connection attempt {attempt + 1}/{max_attempts}")
             
-            # Register connection attempt with pool
+            # Check if we can connect (cooldown check)
+            if not await connection_pool.can_connect(unique_bot_id):
+                print("⚠️ Connection blocked by cooldown - waiting...")
+                await asyncio.sleep(15)  # Wait and retry
+                continue
+            
+            # Register connection attempt
             await connection_pool.register_connection_attempt(unique_bot_id)
             
-            # Use connection pool context manager
-            async with connection_pool.managed_connection(unique_bot_id):
-                # Create fresh bot instance for each attempt
-                bot_instance = Bot()
-                definitions = [BotDefinition(bot_instance, room_id, bot_token)]
-                
-                # Try to connect
-                await __main__.main(definitions)
-                print("✅ Bot connected successfully!")
-                return True
+            # Create fresh bot instance for each attempt
+            bot_instance = Bot()
+            definitions = [BotDefinition(bot_instance, room_id, bot_token)]
+            
+            # Try to connect
+            await __main__.main(definitions)
+            print("✅ Bot connected successfully!")
+            return True
             
         except Exception as e:
             error_msg = str(e)

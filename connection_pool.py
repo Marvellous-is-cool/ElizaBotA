@@ -37,13 +37,13 @@ class ConnectionPoolManager:
         
         # Prevent rapid reconnection attempts
         time_since_last = time.time() - state.last_connect_time
-        if time_since_last < 30:  # 30 second cooldown
-            print(f"⏳ Connection cooldown active for {bot_id} ({30-time_since_last:.1f}s remaining)")
+        if time_since_last < 10:  # 10 second cooldown (reduced from 30)
+            print(f"⏳ Connection cooldown active for {bot_id} ({10-time_since_last:.1f}s remaining)")
             return False
         
         # Limit connection attempts
         if state.connect_attempts > 3:
-            if time_since_last < 300:  # 5 minute penalty for multiple failures
+            if time_since_last < 120:  # 2 minute penalty (reduced from 5)
                 print(f"🚫 Connection penalty active for {bot_id} (too many attempts)")
                 return False
             else:
