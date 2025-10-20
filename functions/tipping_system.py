@@ -65,8 +65,27 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
         if bot_balance < amount:
             return f"❌ Not enough gold"
         
-        # Send the tip
-        await bot.highrise.tip_user(target_user.id, "gold_bar_1", amount)
+        # Map amount to correct tip type (Highrise uses specific tip types)
+        # tip_user(user_id, tip_type) - tip_type contains the amount
+        tip_type_map = {
+            1: "gold_bar_1",
+            5: "gold_bar_5", 
+            10: "gold_bar_10",
+            50: "gold_bar_50",
+            100: "gold_bar_100",
+            500: "gold_bar_500",
+            1000: "gold_bar_1k",
+            5000: "gold_bar_5k",
+            10000: "gold_bar_10k"
+        }
+        
+        if amount not in tip_type_map:
+            return f"❌ Amount must be: 1, 5, 10, 50, 100, 500, 1k, 5k, or 10k"
+        
+        tip_type = tip_type_map[amount]
+        
+        # Send the tip (only 2 args: user_id and tip_type)
+        await bot.highrise.tip_user(target_user.id, tip_type)
         
         # Send short confirmation to owner (whisper)
         return f"✅ Tipped @{target_user.username} {amount}g"
@@ -139,13 +158,31 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
         if bot_balance < total_amount:
             return f"❌ Not enough gold"
         
+        # Map amount to correct tip type
+        tip_type_map = {
+            1: "gold_bar_1",
+            5: "gold_bar_5", 
+            10: "gold_bar_10",
+            50: "gold_bar_50",
+            100: "gold_bar_100",
+            500: "gold_bar_500",
+            1000: "gold_bar_1k",
+            5000: "gold_bar_5k",
+            10000: "gold_bar_10k"
+        }
+        
+        if amount_per_user not in tip_type_map:
+            return f"❌ Amount must be: 1, 5, 10, 50, 100, 500, 1k, 5k, or 10k"
+        
+        tip_type = tip_type_map[amount_per_user]
+        
         # Tip all users (limit response to avoid "message too long")
         success_count = 0
         failed_count = 0
         
         for room_user in users_to_tip:
             try:
-                await bot.highrise.tip_user(room_user.id, "gold_bar_1", amount_per_user)
+                await bot.highrise.tip_user(room_user.id, tip_type)
                 success_count += 1
             except Exception as e:
                 print(f"Failed to tip {room_user.username}: {e}")
@@ -230,13 +267,31 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
         if bot_balance < total_amount:
             return f"❌ Not enough gold"
         
+        # Map amount to correct tip type
+        tip_type_map = {
+            1: "gold_bar_1",
+            5: "gold_bar_5", 
+            10: "gold_bar_10",
+            50: "gold_bar_50",
+            100: "gold_bar_100",
+            500: "gold_bar_500",
+            1000: "gold_bar_1k",
+            5000: "gold_bar_5k",
+            10000: "gold_bar_10k"
+        }
+        
+        if amount_per_user not in tip_type_map:
+            return f"❌ Amount must be: 1, 5, 10, 50, 100, 500, 1k, 5k, or 10k"
+        
+        tip_type = tip_type_map[amount_per_user]
+        
         # Tip all participants (avoid long messages)
         success_count = 0
         failed_count = 0
         
         for participant in participants_in_room:
             try:
-                await bot.highrise.tip_user(participant['user_id'], "gold_bar_1", amount_per_user)
+                await bot.highrise.tip_user(participant['user_id'], tip_type)
                 success_count += 1
             except Exception as e:
                 print(f"Failed to tip participant {participant.get('username', 'unknown')}: {e}")
