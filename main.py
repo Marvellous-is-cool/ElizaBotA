@@ -2457,10 +2457,13 @@ async def main():
             bot_instance = Bot()
             definitions = [BotDefinition(bot_instance, room_id, bot_token)]
             
-            # Try to connect
+            # Try to connect - this blocks until bot disconnects
+            print("🔌 Connecting bot...")
             await __main__.main(definitions)
-            print("✅ Bot connected successfully!")
-            return True
+            
+            # If we reach here, the bot disconnected (not an error, but connection closed)
+            print("⚠️ Bot disconnected - connection closed by server")
+            return False  # Return False to trigger reconnection logic
             
         except Exception as e:
             error_msg = str(e)
