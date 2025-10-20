@@ -660,10 +660,7 @@ class Bot(BaseBot):
                 
         except Exception as e:
             logger.error(f"❌ Error in on_whisper for @{user.username}: {e}")
-            try:
-                await self.highrise.chat(f"Whisper Error: {e}")
-            except:
-                pass
+            # Don't send error to chat - could be too long or cause spam
     
     
     async def on_message(self, user_id: str, conversation_id: str, is_new_conversation: bool) -> None:
