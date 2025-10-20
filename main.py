@@ -643,15 +643,15 @@ class Bot(BaseBot):
             
             if response:
                 try:
-                    # DEBUG: Print message length and content
-                    print(f"📨 DEBUG: Whisper response length: {len(response)} chars")
-                    print(f"📨 DEBUG: Whisper content: {response[:200]}...")  # First 200 chars
+                    # DEBUG: Log message length and content for Render logs
+                    logger.info(f"📨 DEBUG: Whisper response length: {len(response)} chars")
+                    logger.info(f"📨 DEBUG: Whisper content preview: {response[:200]}...")  # First 200 chars
                     
                     await self.highrise.send_whisper(user.id, response)
                     logger.info(f"✅ Whisper response sent to @{user.username}")
                 except Exception as e:
-                    print(f"❌ DEBUG: Whisper failed - Error: {e}")
-                    print(f"❌ DEBUG: Full message that failed: {response}")
+                    logger.error(f"❌ DEBUG: Whisper FAILED - Error: {e}")
+                    logger.error(f"❌ DEBUG: Full message that failed ({len(response)} chars): {response}")
                     await self.highrise.chat(f"Whisper Error: {e}")
                     logger.error(f"❌ Failed to send whisper to @{user.username}: {e}")
             else:
