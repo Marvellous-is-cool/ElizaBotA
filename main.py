@@ -654,13 +654,20 @@ class Bot(BaseBot):
             # Try regular command handler for all other whispers
             response = await self.command_handler(user.id, message)
             if response:
-                logger.info(f"📨 Sending whisper response ({len(response)} chars) to @{user.username}")
                 await self.highrise.send_whisper(user.id, response)
-                logger.info(f"✅ Whisper sent successfully to @{user.username}")
+                logger.info(f"✅ Whisper sent to @{user.username}")
                 
         except Exception as e:
+            # Log full error details for debugging
+            import traceback
             logger.error(f"❌ Error in on_whisper for @{user.username}: {e}")
-            # Don't send error to chat - could be too long or cause spam
+            logger.error(f"📋 Traceback: {traceback.format_exc()}")
+            
+            # Send short, user-friendly error message to user
+            try:
+                await self.highrise.send_whisper(user.id, "⚠️ Sorry, something went wrong. Please try again later.")
+            except:
+                pass  # If whisper fails, just log it
     
     
     async def on_message(self, user_id: str, conversation_id: str, is_new_conversation: bool) -> None:
