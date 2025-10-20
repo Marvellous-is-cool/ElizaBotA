@@ -12,15 +12,15 @@ import re
 async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
     """
     Tip a specific user
-    Usage: tip @username amount
-    Example: tip @john 50
+    Usage: tip @username amount OR !tip @username amount
+    Example: tip @john 50 OR !tip @john 50
     """
     # Check if user is owner
     if user.id != bot.owner_id:
         return "❌ Owner only"
     
-    # Parse command: tip @username amount
-    pattern = r'^tip\s+@(\w+)\s+(\d+)$'
+    # Parse command: tip @username amount (with or without !)
+    pattern = r'^!?tip\s+@(\w+)\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
@@ -78,15 +78,15 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
 async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]:
     """
     Tip all users in the room
-    Usage: tipall amount
-    Example: tipall 10
+    Usage: tipall amount OR !tipall amount
+    Example: tipall 10 OR !tipall 10
     """
     # Check if user is owner
     if user.id != bot.owner_id:
         return "❌ Owner only"
     
-    # Parse command: tipall amount
-    pattern = r'^tipall\s+(\d+)$'
+    # Parse command: tipall amount (with or without !)
+    pattern = r'^!?tipall\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
@@ -152,15 +152,15 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
 async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[str]:
     """
     Tip all registered participants (POP or LOVE)
-    Usage: tipparticipants amount
-    Example: tipparticipants 50
+    Usage: tipparticipants amount OR !tipparticipants amount
+    Example: tipparticipants 50 OR !tipparticipants 50
     """
     # Check if user is owner
     if user.id != bot.owner_id:
         return "❌ Owner only"
     
-    # Parse command: tipparticipants amount
-    pattern = r'^tipparticipants\s+(\d+)$'
+    # Parse command: tipparticipants amount (with or without !)
+    pattern = r'^!?tipparticipants\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
