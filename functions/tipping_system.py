@@ -17,23 +17,23 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
     """
     # Check if user is owner
     if user.id != bot.owner_id:
-        return "❌ Only the room owner can use tip commands."
+        return "❌ Owner only"
     
     # Parse command: tip @username amount
     pattern = r'^tip\s+@(\w+)\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
-        return "❌ Usage: tip @username amount\nExample: tip @john 50"
+        return "❌ Usage: tip @user 50"
     
     target_username = match.group(1)
     amount = int(match.group(2))
     
     if amount <= 0:
-        return "❌ Tip amount must be greater than 0."
+        return "❌ Amount must be > 0"
     
     if amount > 10000:
-        return "❌ Maximum tip amount is 10,000 gold per transaction."
+        return "❌ Max 10,000g per tip"
     
     try:
         # Get room users to find the target
@@ -46,7 +46,7 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
                 break
         
         if not target_user:
-            return f"❌ User @{target_username} not found in the room."
+            return f"❌ @{target_username} not found"
         
         # Check bot's wallet balance
         wallet_response = await bot.highrise.get_wallet()
@@ -63,16 +63,16 @@ async def tip_user(bot: BaseBot, user: User, message: str) -> Optional[str]:
             bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < amount:
-            return f"❌ Insufficient balance. Bot has {bot_balance}g, need {amount}g."
+            return f"❌ Not enough gold"
         
         # Send the tip
         await bot.highrise.tip_user(target_user.id, "gold_bar_1", amount)
         
-        # Send confirmation to owner (whisper)
-        return f"✅ Tipped @{target_user.username} {amount}g!\n💰 Remaining: {bot_balance - amount}g"
+        # Send short confirmation to owner (whisper)
+        return f"✅ Tipped @{target_user.username} {amount}g"
         
     except Exception as e:
-        return f"❌ Failed to tip user: {str(e)}"
+        return f"❌ Tip failed"
 
 
 async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]:
@@ -83,22 +83,22 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
     """
     # Check if user is owner
     if user.id != bot.owner_id:
-        return "❌ Only the room owner can use tip commands."
+        return "❌ Owner only"
     
     # Parse command: tipall amount
     pattern = r'^tipall\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
-        return "❌ Usage: tipall amount\nExample: tipall 10"
+        return "❌ Usage: tipall 10"
     
     amount_per_user = int(match.group(1))
     
     if amount_per_user <= 0:
-        return "❌ Tip amount must be greater than 0."
+        return "❌ Amount must be > 0"
     
     if amount_per_user > 1000:
-        return "❌ Maximum tip amount per user is 1,000 gold for tipall."
+        return "❌ Max 1000g per user"
     
     try:
         # Get all room users
@@ -108,7 +108,7 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
         users_to_tip = [room_user for room_user, _ in room_users if room_user.id != bot.bot_id]
         
         if not users_to_tip:
-            return "❌ No users to tip in the room."
+            return "❌ No users in room"
         
         total_amount = amount_per_user * len(users_to_tip)
         
@@ -126,8 +126,7 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
             bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < total_amount:
-            max_users = bot_balance // amount_per_user if amount_per_user > 0 else 0
-            return f"❌ Insufficient balance.\n💰 Bot: {bot_balance}g\n📊 Need: {total_amount}g\n💡 Can tip {max_users} users"
+            return f"❌ Not enough gold"
         
         # Tip all users (limit response to avoid "message too long")
         success_count = 0
@@ -140,17 +139,14 @@ async def tip_all_users(bot: BaseBot, user: User, message: str) -> Optional[str]
             except Exception:
                 failed_count += 1
         
-        # Build short response to avoid "message too long" error
-        response = f"✅ Tipped {success_count} users {amount_per_user}g each\n"
-        response += f"💰 Spent: {success_count * amount_per_user}g"
-        
+        # Ultra-short response to avoid "message too long" error
         if failed_count > 0:
-            response += f"\n⚠️ {failed_count} failed"
-        
-        return response
+            return f"✅ {success_count} tipped | ⚠️ {failed_count} failed"
+        else:
+            return f"✅ Tipped {success_count} users {amount_per_user}g"
         
     except Exception as e:
-        return f"❌ Failed to tip all users: {str(e)}"
+        return f"❌ Tip failed"
 
 
 async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[str]:
@@ -161,34 +157,34 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
     """
     # Check if user is owner
     if user.id != bot.owner_id:
-        return "❌ Only the room owner can use tip commands."
+        return "❌ Owner only"
     
     # Parse command: tipparticipants amount
     pattern = r'^tipparticipants\s+(\d+)$'
     match = re.match(pattern, message.lower().strip())
     
     if not match:
-        return "❌ Usage: tipparticipants amount\nExample: tipparticipants 50"
+        return "❌ Usage: tipparticipants 50"
     
     amount_per_user = int(match.group(1))
     
     if amount_per_user <= 0:
-        return "❌ Tip amount must be greater than 0."
+        return "❌ Amount must be > 0"
     
     if amount_per_user > 5000:
-        return "❌ Maximum tip amount per participant is 5,000 gold."
+        return "❌ Max 5000g per user"
     
     try:
         # Check if database is available
         if not bot.db_client or not bot.db_client.is_connected:
-            return "❌ Database not available."
+            return "❌ DB not available"
         
         # Get all participants from database
         participants_collection = bot.db_client.db.participants
         participants = await participants_collection.find().to_list(length=None)
         
         if not participants:
-            return "❌ No participants registered yet."
+            return "❌ No participants"
         
         # Get current room users
         room_users = (await bot.highrise.get_room_users()).content
@@ -198,7 +194,7 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
         participants_in_room = [p for p in participants if p['user_id'] in room_user_ids]
         
         if not participants_in_room:
-            return "❌ No registered participants currently in the room."
+            return "❌ No participants in room"
         
         total_amount = amount_per_user * len(participants_in_room)
         
@@ -216,8 +212,7 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
             bot_balance = wallet.amount if hasattr(wallet, 'amount') else 0
         
         if bot_balance < total_amount:
-            max_users = bot_balance // amount_per_user if amount_per_user > 0 else 0
-            return f"❌ Insufficient balance.\n💰 Bot: {bot_balance}g\n📊 Need: {total_amount}g"
+            return f"❌ Not enough gold"
         
         # Tip all participants (avoid long messages)
         success_count = 0
@@ -230,17 +225,14 @@ async def tip_participants(bot: BaseBot, user: User, message: str) -> Optional[s
             except Exception:
                 failed_count += 1
         
-        # Build short response
-        response = f"✅ Tipped {success_count} participants {amount_per_user}g each\n"
-        response += f"💰 Spent: {success_count * amount_per_user}g"
-        
+        # Ultra-short response
         if failed_count > 0:
-            response += f"\n⚠️ {failed_count} failed"
-        
-        return response
+            return f"✅ {success_count} tipped | ⚠️ {failed_count} failed"
+        else:
+            return f"✅ Tipped {success_count} participants {amount_per_user}g"
         
     except Exception as e:
-        return f"❌ Failed to tip participants: {str(e)}"
+        return f"❌ Tip failed"
 
 
 async def check_wallet(bot: BaseBot, user: User) -> Optional[str]:
